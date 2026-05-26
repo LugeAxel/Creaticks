@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Buyer Dashboard</title>
+<!-- Fonts & Icons -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed-variant": "#004883",
+                    "outline-variant": "#c7c4d8",
+                    "surface-tint": "#4d44e3",
+                    "inverse-on-surface": "#f5f0ec",
+                    "inverse-primary": "#c3c0ff",
+                    "background": "#fef8f4",
+                    "surface": "#fef8f4",
+                    "inverse-surface": "#32302e",
+                    "error": "#ba1a1a",
+                    "primary-fixed-dim": "#c3c0ff",
+                    "on-primary-fixed": "#0f0069",
+                    "on-tertiary-container": "#ffd0ce",
+                    "tertiary-fixed-dim": "#ffb3b0",
+                    "on-background": "#1d1b19",
+                    "secondary-fixed": "#d4e3ff",
+                    "tertiary-container": "#b03136",
+                    "on-secondary-fixed": "#001c39",
+                    "primary-container": "#4f46e5",
+                    "on-tertiary-fixed-variant": "#8c1520",
+                    "tertiary-fixed": "#ffdad8",
+                    "on-error-container": "#93000a",
+                    "on-tertiary-fixed": "#410006",
+                    "surface-container-highest": "#e7e1de",
+                    "secondary-fixed-dim": "#a4c9ff",
+                    "on-primary-fixed-variant": "#3323cc",
+                    "on-surface-variant": "#464555",
+                    "tertiary": "#8f1721",
+                    "on-surface": "#1d1b19",
+                    "on-primary-container": "#dad7ff",
+                    "on-secondary": "#ffffff",
+                    "outline": "#777587",
+                    "on-error": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "surface-bright": "#fef8f4",
+                    "surface-container-high": "#ede7e3",
+                    "on-secondary-container": "#003c70",
+                    "secondary": "#0060ac",
+                    "surface-container": "#f3ede9",
+                    "primary": "#3525cd",
+                    "on-primary": "#ffffff",
+                    "secondary-container": "#64a8fe",
+                    "surface-dim": "#ded9d5",
+                    "surface-container-low": "#f8f2ef",
+                    "primary-fixed": "#e2dfff",
+                    "surface-variant": "#e7e1de"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter-desktop": "24px",
+                    "base": "8px",
+                    "sm": "8px",
+                    "margin-desktop": "auto",
+                    "xl": "32px",
+                    "gutter-mobile": "16px",
+                    "xs": "4px",
+                    "margin-mobile": "20px",
+                    "lg": "24px",
+                    "md": "16px"
+            },
+            "fontFamily": {
+                    "headline-lg-mobile": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "label-sm": [
+                            "Inter"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "headline-lg": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "display-lg": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-lg": [
+                            "Inter"
+                    ],
+                    "headline-md": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "label-md": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {
+                    "headline-lg-mobile": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-sm": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "letterSpacing": "-0.01em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "display-lg": [
+                            "40px",
+                            {
+                                    "lineHeight": "48px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "800"
+                            }
+                    ],
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-md": [
+                            "20px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "letterSpacing": "0.01em",
+                                    "fontWeight": "600"
+                            }
+                    ]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        /* Hide scrollbar for horizontal scroll but keep functionality */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Ticket Cutout Effect */
+        .ticket-cutout-left, .ticket-cutout-right {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            background-color: theme('colors.background');
+            border-radius: 50%;
+            z-index: 10;
+        }
+        .ticket-cutout-left {
+            left: -10px;
+            border-right: 1px solid theme('colors.outline-variant');
+        }
+        .ticket-cutout-right {
+            right: -10px;
+            border-left: 1px solid theme('colors.outline-variant');
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md pb-24 selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="bg-surface w-full top-0 sticky flex justify-between items-center px-margin-mobile h-16 z-40 transition-shadow duration-300" id="topAppBar">
+<h1 class="font-headline-md text-headline-md text-primary">Hai, Pengguna!</h1>
+<div class="flex items-center gap-sm">
+<button aria-label="Notifications" class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high transition-colors active:scale-95 transition-transform">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
+</button>
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant bg-surface-container-low flex-shrink-0 cursor-pointer hover:opacity-90 transition-opacity">
+<img alt="User profile photo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAHzdHTN80xwP8aI8nMuIwA9ZcL2TbTD3lF6fwfnWxzaMJMFWDznt-w3XXBEBZ8N9lr_QGJjuPQb9bwk_JIA-CNoa1EuNLbLrYrnrTA-r_Y2U8ig-KZA5cbixMe4T4OkesymhVTVL4p23wvel5vVAaiiF44cQXF-UdDTNJR-5XJxPfUC1wjHnsCohdj65qLBLpO6BBptMaZ3pD01CXoKJEA2BTx9xmNGtFcx2mG89fzo7CU7MeVrX7o71noUewiw0wx3BpvIiUz-w4"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col gap-xl pt-md">
+<!-- Active Tickets Section (Horizontal Scroll) -->
+<section class="flex flex-col gap-md">
+<div class="px-margin-mobile flex justify-between items-end">
+<h2 class="font-headline-md text-headline-md text-on-surface">Tiket Aktif</h2>
+<a class="font-label-md text-label-md text-primary hover:text-primary-fixed-dim transition-colors" href="#">Lihat Semua</a>
+</div>
+<div class="flex overflow-x-auto gap-md px-margin-mobile pb-4 snap-x hide-scrollbar">
+<!-- Ticket Card 1 -->
+<article class="min-w-[280px] w-[85vw] max-w-[320px] bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant flex flex-col snap-center shrink-0 relative overflow-hidden group">
+<div class="h-32 w-full relative overflow-hidden bg-secondary-container">
+<img alt="Event Image" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A vibrant, high-energy music festival scene with a large crowd bathed in warm, colorful stage lights. The lighting is dynamic, featuring bright purples and energetic blues that complement a modern, playful UI aesthetic. The atmosphere is joyful and communal, perfectly suited for an event ticketing app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0GGNgcCpC4MEQHo62dOzTeXb49tfModVu77pUOG_sJ59BCCaThILob6xT682KWV93nhmDM99JdK3_Llp_qgdsUyPyP6WH6ltmi6VrmC9XysQMTmKtcVo5_dvZWghWQtJ6DmP_cLaG-63sOQ5gegilV-XEA0mQPUoVyot33FHG79YMT4f-Jj_WlL0Hb0uOdYt_LzjGL1Dd-nyqUK30o5Yg2Drg3Ghu_WJrKsWkWt2UVEkX7K8zJcS6gFuJ64djskUaQxcvBqHX5J4"/>
+<div class="absolute top-2 right-2 bg-surface-container-lowest/90 backdrop-blur-sm px-3 py-1 rounded-full border border-surface-dim">
+<span class="font-label-sm text-label-sm text-primary">Besok</span>
+</div>
+</div>
+<div class="relative py-4 px-md flex flex-col gap-sm bg-surface-container-lowest">
+<!-- Dashed separator mimicking perforated ticket -->
+<div class="absolute top-0 left-0 w-full h-[1px] border-t-2 border-dashed border-outline-variant/50 -translate-y-[1px]"></div>
+<div class="ticket-cutout-left -top-[10px] transform-none bg-background"></div>
+<div class="ticket-cutout-right -top-[10px] transform-none bg-background"></div>
+<h3 class="font-headline-md text-headline-md text-on-surface line-clamp-1">Jakarta Food Fest 2024</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span>
+<span>Sab, 24 Okt • 10:00 - 22:00</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span class="line-clamp-1">GBK Senayan, Jakarta</span>
+</div>
+<button class="mt-2 w-full bg-primary text-on-primary font-label-md text-label-md py-3 rounded-full hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm flex justify-center items-center gap-2">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">qr_code_scanner</span>
+                            Tampilkan QR
+                        </button>
+</div>
+</article>
+<!-- Ticket Card 2 -->
+<article class="min-w-[280px] w-[85vw] max-w-[320px] bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant flex flex-col snap-center shrink-0 relative overflow-hidden group">
+<div class="h-32 w-full relative overflow-hidden bg-tertiary-container">
+<img alt="Event Image" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A brightly lit, modern community workshop space filled with people engaging in creative activities. The room has large windows letting in soft, natural daylight, reflecting a warm, optimistic mood. The aesthetic is clean and collaborative, fitting a playful and accessible lifestyle application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZ3mOGJdDS99TBXZTTFi4ZJKPHP3WGBytaP-Yr5swAARvq0pWnKcr8q0LOfB4dtsks3jprLTindb1OCPpEiIM6ne2cReyRuZD56S1Mv-yuP4kBaBLh3QmqWD7XJIahj5aDzJwgRumVHfe7pVJUHCvIfBOh5_O1ZBKNdXBWvsQDT1aHtU7h5mpjViAW2SXAHJjsib2M20ODkanu4-F3C_iQuh78CFVGJAS_9nEHVnVViiTbzqDPlVx4AKs9RSO-QLyOh6h3B48HZCA"/>
+</div>
+<div class="relative py-4 px-md flex flex-col gap-sm bg-surface-container-lowest">
+<div class="absolute top-0 left-0 w-full h-[1px] border-t-2 border-dashed border-outline-variant/50 -translate-y-[1px]"></div>
+<div class="ticket-cutout-left -top-[10px] transform-none bg-background"></div>
+<div class="ticket-cutout-right -top-[10px] transform-none bg-background"></div>
+<h3 class="font-headline-md text-headline-md text-on-surface line-clamp-1">Workshop Keramik Dasar</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span>
+<span>Min, 25 Okt • 14:00 - 16:00</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span class="line-clamp-1">Studio Satu, Bandung</span>
+</div>
+<button class="mt-2 w-full bg-primary-container text-on-primary-container font-label-md text-label-md py-3 rounded-full hover:bg-primary transition-colors shadow-sm flex justify-center items-center gap-2">
+                            Lihat Detail
+                        </button>
+</div>
+</article>
+</div>
+</section>
+<!-- History Section (Vertical List) -->
+<section class="px-margin-mobile flex flex-col gap-md pb-md">
+<h2 class="font-headline-md text-headline-md text-on-surface">Riwayat</h2>
+<div class="flex flex-col gap-sm">
+<!-- History Item 1 (Completed) -->
+<div class="flex items-center gap-md p-md bg-surface-container-lowest border border-surface-dim rounded-xl hover:shadow-sm transition-shadow cursor-pointer">
+<div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-outline" style="font-variation-settings: 'FILL' 1;">local_activity</span>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-label-md text-label-md text-on-surface line-clamp-1">Konser Indie Lokal</span>
+<span class="font-label-sm text-label-sm text-outline">12 Sep 2024</span>
+</div>
+<div class="shrink-0 px-2 py-1 rounded-full bg-secondary-container/20 border border-secondary-container">
+<span class="font-label-sm text-label-sm text-secondary">Selesai</span>
+</div>
+</div>
+<!-- History Item 2 (Cancelled) -->
+<div class="flex items-center gap-md p-md bg-surface-container-lowest border border-surface-dim rounded-xl hover:shadow-sm transition-shadow cursor-pointer opacity-70">
+<div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-outline" style="font-variation-settings: 'FILL' 1;">cancel</span>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-label-md text-label-md text-on-surface line-clamp-1">Lari Pagi Bersama</span>
+<span class="font-label-sm text-label-sm text-outline">5 Sep 2024</span>
+</div>
+<div class="shrink-0 px-2 py-1 rounded-full bg-error-container/20 border border-error-container">
+<span class="font-label-sm text-label-sm text-error">Batal</span>
+</div>
+</div>
+<!-- History Item 3 (Completed) -->
+<div class="flex items-center gap-md p-md bg-surface-container-lowest border border-surface-dim rounded-xl hover:shadow-sm transition-shadow cursor-pointer">
+<div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-outline" style="font-variation-settings: 'FILL' 1;">local_activity</span>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-label-md text-label-md text-on-surface line-clamp-1">Pameran Seni Rupa</span>
+<span class="font-label-sm text-label-sm text-outline">28 Agu 2024</span>
+</div>
+<div class="shrink-0 px-2 py-1 rounded-full bg-secondary-container/20 border border-secondary-container">
+<span class="font-label-sm text-label-sm text-secondary">Selesai</span>
+</div>
+</div>
+</div>
+<button class="w-full py-3 mt-2 rounded-full border border-outline-variant text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low transition-colors">
+                Muat Lebih Banyak
+            </button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="bg-surface shadow-[0_-4px_12px_rgba(79,70,229,0.08)] fixed bottom-0 w-full z-50 rounded-t-xl flex justify-around items-center h-20 px-4">
+<!-- Active Tab: Home -->
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-5 py-2 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-label-md text-label-md mt-1">Home</span>
+</a>
+<!-- Inactive Tab: Tiket -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-surface-container-highest transition-all rounded-xl active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined">confirmation_number</span>
+<span class="font-label-md text-label-md mt-1">Tiket</span>
+</a>
+<!-- Inactive Tab: Chat -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-surface-container-highest transition-all rounded-xl active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="font-label-md text-label-md mt-1">Chat</span>
+</a>
+<!-- Inactive Tab: Profil -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-surface-container-highest transition-all rounded-xl active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-md text-label-md mt-1">Profil</span>
+</a>
+</nav>
+<!-- Simple script for app bar shadow on scroll -->
+<script>
+        window.addEventListener('scroll', () => {
+            const appBar = document.getElementById('topAppBar');
+            if (window.scrollY > 10) {
+                appBar.classList.add('shadow-sm');
+            } else {
+                appBar.classList.remove('shadow-sm');
+            }
+        });
+    </script>
+</body></html>

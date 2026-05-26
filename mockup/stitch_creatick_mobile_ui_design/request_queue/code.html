@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Antrean Request - Creatick Admin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+        /* Custom scrollbar for horizontal filter list */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-fixed": "#0f0069",
+                      "primary-fixed": "#e2dfff",
+                      "tertiary-fixed": "#ffdbcc",
+                      "surface-container-highest": "#e4e1ee",
+                      "surface-dim": "#dcd8e5",
+                      "outline-variant": "#c7c4d8",
+                      "tertiary-fixed-dim": "#ffb695",
+                      "on-secondary-container": "#003c70",
+                      "surface-container-high": "#eae6f4",
+                      "secondary-fixed-dim": "#a4c9ff",
+                      "primary": "#3525cd",
+                      "surface-container-lowest": "#ffffff",
+                      "on-error-container": "#93000a",
+                      "inverse-primary": "#c3c0ff",
+                      "surface-variant": "#e4e1ee",
+                      "background": "#fcf8ff",
+                      "on-primary": "#ffffff",
+                      "tertiary": "#7e3000",
+                      "on-surface": "#1b1b24",
+                      "on-primary-fixed-variant": "#3323cc",
+                      "on-secondary-fixed-variant": "#004883",
+                      "on-error": "#ffffff",
+                      "on-tertiary": "#ffffff",
+                      "surface": "#fcf8ff",
+                      "on-primary-container": "#dad7ff",
+                      "surface-container": "#f0ecf9",
+                      "secondary-container": "#64a8fe",
+                      "error": "#ba1a1a",
+                      "secondary": "#0060ac",
+                      "on-tertiary-fixed": "#351000",
+                      "on-background": "#1b1b24",
+                      "surface-container-low": "#f5f2ff",
+                      "outline": "#777587",
+                      "on-tertiary-container": "#ffd2be",
+                      "tertiary-container": "#a44100",
+                      "on-tertiary-fixed-variant": "#7b2f00",
+                      "primary-container": "#4f46e5",
+                      "on-secondary-fixed": "#001c39",
+                      "primary-fixed-dim": "#c3c0ff",
+                      "on-surface-variant": "#464555",
+                      "inverse-surface": "#302f39",
+                      "error-container": "#ffdad6",
+                      "surface-bright": "#fcf8ff",
+                      "inverse-on-surface": "#f3effc",
+                      "surface-tint": "#4d44e3",
+                      "secondary-fixed": "#d4e3ff",
+                      "on-secondary": "#ffffff",
+                      "success-container": "#bbf7d0",
+                      "on-success-container": "#166534",
+                      "warning-container": "#fef08a",
+                      "on-warning-container": "#854d0e",
+                      "coral-red": "#FF6B6B",
+                      "on-coral-red": "#FFFFFF"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "margin-mobile": "16px",
+                      "gutter": "24px",
+                      "container-max-width": "1280px",
+                      "margin-desktop": "40px",
+                      "base": "4px"
+              },
+              "fontFamily": {
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "headline-lg-mobile": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "headline-sm": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-xl": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Plus Jakarta Sans"
+                      ]
+              },
+              "fontSize": {
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-sm": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-xl": [
+                              "48px",
+                              {
+                                      "lineHeight": "60px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+            },
+          }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col md:flex-row">
+<!-- NavigationDrawer (Desktop) -->
+<aside class="hidden md:flex flex-col bg-surface-container-low border-r border-outline-variant shadow-lg h-screen w-[280px] rounded-r-xl fixed inset-y-0 left-0 z-[60] py-6">
+<div class="px-6 mb-8 flex items-center gap-4">
+<img alt="Admin Avatar" class="w-12 h-12 rounded-full object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDCvhfHfpAnRFnIfjgujy0DlqK_AR4__Yflty-WhcjVv0mzw4VdCrIRq8IFw9FFXxzmolry5M_qhiXubfrAv0stDxf5U8CF6oBwHxdTWV98T1LHO-rqT0BdJwiaKwjcWJ4I5mJmL4JJtx2Jrqmt9oxSmHPItKV9DoR096q3AS9MSQWAKzix2S3ZRvaa9GWEtnqoJ8HH_SmHxQlZVKqH8NKif-y6Enu5ClyFbZcLFIIFCRAfMKcnbw6BP94qiikfJHeSR6oPEr7zm4o"/>
+<div>
+<h2 class="text-headline-md font-headline-md text-primary font-bold">Admin Panel</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Kreativitas Tanpa Batas</p>
+<span class="text-label-md font-label-md text-outline text-xs mt-1 block">v1.0.4</span>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-2">
+<!-- Active Item: Antrean Request -->
+<a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container font-bold rounded-full mx-2 hover:bg-surface-container-highest transition-all cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">pending_actions</span>
+<span class="text-label-md font-label-md">Antrean Request</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 hover:bg-surface-container-highest transition-all cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">qr_code_scanner</span>
+<span class="text-label-md font-label-md">Scanner QR</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 hover:bg-surface-container-highest transition-all cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span class="text-label-md font-label-md">Kehadiran</span>
+</a>
+</nav>
+<div class="px-2 mt-auto">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 hover:bg-surface-container-highest transition-all cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="text-label-md font-label-md">Keluar</span>
+</a>
+</div>
+</aside>
+<!-- TopAppBar (Mobile) -->
+<header class="md:hidden bg-background text-primary flex justify-between items-center w-full px-margin-mobile h-16 docked full-width top-0 sticky z-50 transition-all duration-200 active:scale-95">
+<div class="flex items-center gap-3">
+<img alt="Admin Avatar" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFL8-FB2A5QcpQjT_ZdR5JLw4xb1oQps_j-IjGMiRyOGdCg2mgVhlRoGelw78SigMRUc9PNqw9wFzgf79h9zoNkMaDGq_Mt79zr4DKf28JPxrdyE6vXjSI89XgmkxlxwwAlx_TFkN6tzkfyTUvR4kOyzOItpNssXSnD7Eh9ozeZ_3xK_027ATB62jva0CperVfje5d9UpP-44IY1acwQctRIX3ghI1lOj_JNW_LprwAs-ix7SFfgFW2xY0wLrivqiWN3mcrEiLl18"/>
+<h1 class="text-headline-md font-headline-md font-bold text-primary">Creatick</h1>
+</div>
+<button class="text-on-surface-variant hover:bg-surface-container-high rounded-full p-2 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 w-full md:ml-[280px] flex flex-col min-h-screen pb-24 md:pb-8">
+<!-- Header Section -->
+<div class="px-margin-mobile md:px-margin-desktop py-6 md:py-8 bg-surface-container-lowest shadow-[0px_4px_20px_rgba(79,70,229,0.05)] rounded-b-xl mb-6 sticky top-[64px] md:top-0 z-40">
+<h1 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-primary font-bold mb-2">Antrean Request</h1>
+<p class="text-body-md font-body-md text-on-surface-variant">Kelola dan pantau status request tiket terbaru.</p>
+<!-- Sticky Filter Pill Row -->
+<div class="mt-6 overflow-x-auto hide-scrollbar">
+<div class="flex gap-2 min-w-max pb-2">
+<button class="px-4 py-2 rounded-full bg-primary-container text-on-primary-container text-label-md font-label-md transition-colors active:scale-95">Semua</button>
+<button class="px-4 py-2 rounded-full bg-surface-variant text-on-surface-variant hover:bg-surface-container-high text-label-md font-label-md transition-colors active:scale-95 border border-outline-variant">Baru</button>
+<button class="px-4 py-2 rounded-full bg-surface-variant text-on-surface-variant hover:bg-surface-container-high text-label-md font-label-md transition-colors active:scale-95 border border-outline-variant">Menunggu Bayar</button>
+<button class="px-4 py-2 rounded-full bg-surface-variant text-on-surface-variant hover:bg-surface-container-high text-label-md font-label-md transition-colors active:scale-95 border border-outline-variant">Bukti Dikirim</button>
+<button class="px-4 py-2 rounded-full bg-surface-variant text-on-surface-variant hover:bg-surface-container-high text-label-md font-label-md transition-colors active:scale-95 border border-outline-variant">Dikonfirmasi</button>
+<button class="px-4 py-2 rounded-full bg-surface-variant text-on-surface-variant hover:bg-surface-container-high text-label-md font-label-md transition-colors active:scale-95 border border-outline-variant">Batal</button>
+</div>
+</div>
+</div>
+<!-- List of Cards Container -->
+<div class="px-margin-mobile md:px-margin-desktop flex-1 w-full max-w-container-max-width mx-auto flex flex-col gap-4">
+<!-- Card Item 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 md:p-5 shadow-[0px_4px_20px_rgba(79,70,229,0.05)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border border-outline-variant/30 hover:border-primary/30 transition-colors">
+<div class="flex items-center gap-4 w-full sm:w-auto">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-primary font-bold text-headline-sm font-headline-sm">
+                        SA
+                    </div>
+<div class="flex-1">
+<div class="flex flex-wrap items-center gap-2 mb-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface m-0">Siti Aminah</h3>
+<span class="px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant text-xs font-semibold uppercase tracking-wider">VIP</span>
+<span class="text-body-sm font-body-sm text-outline">• 14m ago</span>
+</div>
+<div class="flex items-center gap-2 mt-2">
+<span class="px-3 py-1 rounded-full bg-warning-container/30 text-on-warning-container text-label-md font-label-md flex items-center gap-1.5 border border-warning-container">
+<span class="w-2 h-2 rounded-full bg-on-warning-container"></span>
+                                Bukti Dikirim
+                            </span>
+<span class="text-body-sm font-body-sm text-on-surface-variant block truncate max-w-[200px] md:max-w-none">INV-202310-001 • Rp 750.000</span>
+</div>
+</div>
+</div>
+<button class="w-full sm:w-auto px-6 py-2.5 rounded-full bg-primary text-on-primary text-label-md font-label-md hover:bg-on-primary-fixed-variant transition-colors active:scale-95 shadow-sm whitespace-nowrap">
+                    Lihat Detail
+                </button>
+</div>
+<!-- Card Item 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 md:p-5 shadow-[0px_4px_20px_rgba(79,70,229,0.05)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border border-outline-variant/30 hover:border-primary/30 transition-colors">
+<div class="flex items-center gap-4 w-full sm:w-auto">
+<div class="w-12 h-12 rounded-full bg-secondary-container/30 flex items-center justify-center flex-shrink-0 text-on-secondary-container font-bold text-headline-sm font-headline-sm">
+                        BS
+                    </div>
+<div class="flex-1">
+<div class="flex flex-wrap items-center gap-2 mb-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface m-0">Budi Santoso</h3>
+<span class="px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant text-xs font-semibold uppercase tracking-wider">Reguler</span>
+<span class="text-body-sm font-body-sm text-outline">• 1hr ago</span>
+</div>
+<div class="flex items-center gap-2 mt-2">
+<span class="px-3 py-1 rounded-full bg-success-container/30 text-on-success-container text-label-md font-label-md flex items-center gap-1.5 border border-success-container">
+<span class="w-2 h-2 rounded-full bg-on-success-container"></span>
+                                Dikonfirmasi
+                            </span>
+<span class="text-body-sm font-body-sm text-on-surface-variant block truncate max-w-[200px] md:max-w-none">INV-202310-002 • Rp 250.000</span>
+</div>
+</div>
+</div>
+<button class="w-full sm:w-auto px-6 py-2.5 rounded-full bg-surface-variant text-on-surface-variant border border-outline-variant text-label-md font-label-md hover:bg-surface-container-high transition-colors active:scale-95 shadow-sm whitespace-nowrap">
+                    Lihat Detail
+                </button>
+</div>
+</div>
+</main>
+<!-- Floating Action Button (FAB) -->
+<button class="fixed bottom-24 md:bottom-8 right-4 md:right-8 w-14 h-14 bg-[#FF6B6B] text-white rounded-full shadow-lg flex items-center justify-center hover:bg-[#ff5252] transition-colors active:scale-90 z-50">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">qr_code_scanner</span>
+</button>
+</body></html>

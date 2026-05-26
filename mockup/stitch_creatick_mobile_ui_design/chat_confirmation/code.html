@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Creatick Admin - Konfirmasi Pembayaran</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-fixed": "#0f0069",
+                      "primary-fixed": "#e2dfff",
+                      "tertiary-fixed": "#ffdbcc",
+                      "surface-container-highest": "#e4e1ee",
+                      "surface-dim": "#dcd8e5",
+                      "outline-variant": "#c7c4d8",
+                      "tertiary-fixed-dim": "#ffb695",
+                      "on-secondary-container": "#003c70",
+                      "surface-container-high": "#eae6f4",
+                      "secondary-fixed-dim": "#a4c9ff",
+                      "primary": "#3525cd",
+                      "surface-container-lowest": "#ffffff",
+                      "on-error-container": "#93000a",
+                      "inverse-primary": "#c3c0ff",
+                      "surface-variant": "#e4e1ee",
+                      "background": "#fcf8ff",
+                      "on-primary": "#ffffff",
+                      "tertiary": "#7e3000",
+                      "on-surface": "#1b1b24",
+                      "on-primary-fixed-variant": "#3323cc",
+                      "on-secondary-fixed-variant": "#004883",
+                      "on-error": "#ffffff",
+                      "on-tertiary": "#ffffff",
+                      "surface": "#fcf8ff",
+                      "on-primary-container": "#dad7ff",
+                      "surface-container": "#f0ecf9",
+                      "secondary-container": "#64a8fe",
+                      "error": "#ba1a1a",
+                      "secondary": "#0060ac",
+                      "on-tertiary-fixed": "#351000",
+                      "on-background": "#1b1b24",
+                      "surface-container-low": "#f5f2ff",
+                      "outline": "#777587",
+                      "on-tertiary-container": "#ffd2be",
+                      "tertiary-container": "#a44100",
+                      "on-tertiary-fixed-variant": "#7b2f00",
+                      "primary-container": "#4f46e5",
+                      "on-secondary-fixed": "#001c39",
+                      "primary-fixed-dim": "#c3c0ff",
+                      "on-surface-variant": "#464555",
+                      "inverse-surface": "#302f39",
+                      "error-container": "#ffdad6",
+                      "surface-bright": "#fcf8ff",
+                      "inverse-on-surface": "#f3effc",
+                      "surface-tint": "#4d44e3",
+                      "secondary-fixed": "#d4e3ff",
+                      "on-secondary": "#ffffff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "margin-mobile": "16px",
+                      "gutter": "24px",
+                      "container-max-width": "1280px",
+                      "margin-desktop": "40px",
+                      "base": "4px"
+              },
+              "fontFamily": {
+                      "label-md": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "headline-lg-mobile": ["Plus Jakarta Sans"],
+                      "body-lg": ["Inter"],
+                      "headline-sm": ["Plus Jakarta Sans"],
+                      "headline-xl": ["Plus Jakarta Sans"],
+                      "headline-lg": ["Plus Jakarta Sans"],
+                      "body-md": ["Inter"],
+                      "headline-md": ["Plus Jakarta Sans"]
+              },
+              "fontSize": {
+                      "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "700"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-xl": ["48px", {"lineHeight": "60px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Hide scrollbar for cleaner look in chat */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface h-screen flex flex-col overflow-hidden antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation Header (Transactional Mode) -->
+<header class="flex-none bg-surface-container-lowest border-b border-surface-variant z-20 shadow-[0px_4px_20px_rgba(79,70,229,0.02)]">
+<div class="flex items-center gap-3 px-4 py-3 max-w-container-max-width mx-auto w-full">
+<button aria-label="Kembali" class="p-2 -ml-2 rounded-full text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors active:scale-95">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<div class="relative">
+<img alt="Avatar Siti Aminah" class="w-10 h-10 rounded-full object-cover border-2 border-surface" data-alt="A close up portrait photo of a cheerful young Indonesian woman with a neat hijab, lit by soft natural daylight. She has a warm, professional smile. The background is a slightly blurred modern bright cafe interior. The image has a clean, high-end, friendly aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzsopzEO1gRmuNVJXDycgQ0mMmuZ8MWfyGuMvJdWAHEAw5QWDyUth_gr2VAE8_qkJW1u-geKB_AE9YdSMY86y0xh-bhOyxUGOXUM3xdowlSIyLejnZOqwxRe63GhcAio3qmGIR-Xcb57aXjeFVJ8qykNnQK8GBkNRsMQU4CVD1TJ37LcbwCMYl144Drf-udpNnd3efXRn1VPYl1yk3JGu2K88vaMHPkjf-PMdFZDWrxCMCIrhKLX9nx5nitgAsyh7iQuYjFFyPm0g"/>
+<div class="absolute bottom-0 right-0 w-3 h-3 bg-[#10B981] border-2 border-surface rounded-full"></div>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<h1 class="text-label-md font-label-md text-on-surface truncate">Siti Aminah</h1>
+<div class="flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[12px] font-body-sm text-primary truncate">Bukti Pembayaran Dikirim</span>
+</div>
+</div>
+<button class="p-2 -mr-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</header>
+<!-- Chat Canvas -->
+<main class="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col no-scrollbar max-w-3xl mx-auto w-full">
+<!-- Date Divider -->
+<div class="flex justify-center mt-2">
+<span class="px-3 py-1 bg-surface-container text-on-surface-variant text-[11px] font-label-md rounded-full shadow-sm">Hari Ini</span>
+</div>
+<!-- Admin Message (Left) -->
+<div class="flex justify-start max-w-[85%] md:max-w-[70%] group">
+<div class="flex flex-col gap-1 items-start">
+<div class="bg-surface-container-highest text-on-surface rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-[0px_2px_8px_rgba(0,0,0,0.04)] relative">
+<p class="text-body-sm font-body-sm leading-relaxed">Halo Kak Siti, untuk pesanan Paket Premium Kreator #ORD-8821 apakah sudah dilakukan pembayaran?</p>
+</div>
+<span class="text-[10px] text-outline ml-1 opacity-0 group-hover:opacity-100 transition-opacity">09:41 AM</span>
+</div>
+</div>
+<!-- Buyer Message (Right) -->
+<div class="flex justify-end max-w-[85%] md:max-w-[70%] self-end group">
+<div class="flex flex-col gap-1 items-end">
+<div class="bg-primary-container text-on-primary-container rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-[0px_4px_12px_rgba(79,70,229,0.1)] relative">
+<p class="text-body-sm font-body-sm leading-relaxed">Halo min, sudah ya barusan saya transfer ke rekening Creatick.</p>
+</div>
+</div>
+</div>
+<!-- Buyer Message with Payment Proof (Right) -->
+<div class="flex justify-end max-w-[85%] md:max-w-[70%] self-end group">
+<div class="flex flex-col gap-1 items-end">
+<div class="bg-primary-container text-on-primary-container rounded-2xl rounded-tr-sm p-2 shadow-[0px_4px_12px_rgba(79,70,229,0.1)] relative w-64 md:w-72">
+<p class="text-body-sm font-body-sm px-2 pt-1 pb-2">Ini bukti transfernya ya.</p>
+<!-- Tappable Image Card -->
+<div class="relative rounded-xl overflow-hidden cursor-pointer group/card border border-primary-fixed/30 bg-surface-container">
+<img alt="Bukti Transfer" class="w-full h-48 object-cover blur-[1px] group-hover/card:blur-none transition-all duration-300" data-alt="A close up, stylized photograph of a modern smartphone screen displaying a successful digital banking transfer receipt. The screen glows brightly against a dark, warm background. The interface on the screen is minimal and clean, indicating a successful transaction to 'Creatick Admin'. The lighting highlights the crisp details of the digital receipt." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqLHmpp0YBo-YmGckKIDicSbSsc5CHruH9Wt_h_eA2F6mMXdduopko9iOAWcvbe9z_67pWO4x4yHelNacsKwXBsYuwcMcEyYT3r5YohIyj6siQEYIZePdVJxx8Sj9E3FoizaEobvzu_S4X-QTehBm-ltxnbYhHLZzIcNr9spJ7UlxyZB_SY3HkUndhGXLXvd41fSl35PXOVflcO-2MTUB9Oo3Gjq2p2X-N5xtkSozGWWOnxGJ-tDpcD2mEt2QaVqJX_oF10E2BgZU"/>
+<!-- Overlay & Button -->
+<div class="absolute inset-0 bg-inverse-surface/40 flex flex-col items-center justify-center opacity-100 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
+<button class="bg-surface text-primary px-4 py-2 rounded-full text-label-md font-label-md flex items-center gap-2 shadow-lg transform scale-100 md:scale-95 md:group-hover/card:scale-100 transition-all">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+                                Lihat Bukti Bayar
+                            </button>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-1 mr-1">
+<span class="text-[10px] text-outline opacity-0 group-hover:opacity-100 transition-opacity">09:45 AM</span>
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">done_all</span>
+</div>
+</div>
+</div>
+<!-- Spacer to ensure input doesn't overlap latest message -->
+<div class="h-4"></div>
+</main>
+<!-- Bottom Interaction Area -->
+<div class="flex-none bg-surface-container-lowest border-t border-surface-variant z-20 pb-safe shadow-[0px_-4px_20px_rgba(0,0,0,0.02)]">
+<!-- Action Strip -->
+<div class="flex items-center gap-3 px-4 py-3 overflow-x-auto no-scrollbar max-w-container-max-width mx-auto w-full">
+<button class="flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full text-label-md font-label-md shadow-[0px_4px_12px_rgba(53,37,205,0.25)] hover:bg-on-primary-fixed-variant active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+                Konfirmasi Pembayaran
+            </button>
+<button class="flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-error text-error rounded-full text-label-md font-label-md hover:bg-error-container/20 active:scale-95 transition-all duration-200">
+                Tolak
+            </button>
+</div>
+<!-- Text Input Area -->
+<div class="flex items-end gap-2 px-4 pb-4 pt-1 max-w-container-max-width mx-auto w-full">
+<button aria-label="Tambah Lampiran" class="p-2 mb-1 text-outline hover:text-primary transition-colors rounded-full hover:bg-surface-container shrink-0">
+<span class="material-symbols-outlined text-[24px]">add_circle</span>
+</button>
+<div class="flex-1 bg-surface-container rounded-[20px] border border-outline-variant focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all flex items-center overflow-hidden min-h-[48px]">
+<textarea class="w-full bg-transparent border-none focus:ring-0 resize-none py-3 px-4 text-body-md font-body-md text-on-surface max-h-32 placeholder:text-outline" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'" placeholder="Ketik balasan untuk Siti..." rows="1"></textarea>
+<button class="p-2 mr-1 text-outline hover:text-primary transition-colors shrink-0">
+<span class="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
+</button>
+</div>
+<button aria-label="Kirim Pesan" class="p-3 mb-0.5 bg-primary text-on-primary rounded-full shadow-md hover:bg-on-primary-fixed-variant hover:shadow-lg active:scale-90 transition-all duration-200 shrink-0 flex items-center justify-center w-[48px] h-[48px]">
+<span class="material-symbols-outlined text-[20px] ml-1" style="font-variation-settings: 'FILL' 1;">send</span>
+</button>
+</div>
+</div>
+</body></html>

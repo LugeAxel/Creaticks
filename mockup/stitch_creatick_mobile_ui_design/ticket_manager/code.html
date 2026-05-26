@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Creatick - Ticket Type Manager</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed": "#0f0069",
+                        "primary-fixed": "#e2dfff",
+                        "tertiary-fixed": "#ffdbcc",
+                        "surface-container-highest": "#e4e1ee",
+                        "surface-dim": "#dcd8e5",
+                        "outline-variant": "#c7c4d8",
+                        "tertiary-fixed-dim": "#ffb695",
+                        "on-secondary-container": "#003c70",
+                        "surface-container-high": "#eae6f4",
+                        "secondary-fixed-dim": "#a4c9ff",
+                        "primary": "#3525cd",
+                        "surface-container-lowest": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "inverse-primary": "#c3c0ff",
+                        "surface-variant": "#e4e1ee",
+                        "background": "#fcf8ff",
+                        "on-primary": "#ffffff",
+                        "tertiary": "#7e3000",
+                        "on-surface": "#1b1b24",
+                        "on-primary-fixed-variant": "#3323cc",
+                        "on-secondary-fixed-variant": "#004883",
+                        "on-error": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#fcf8ff",
+                        "on-primary-container": "#dad7ff",
+                        "surface-container": "#f0ecf9",
+                        "secondary-container": "#64a8fe",
+                        "error": "#ba1a1a",
+                        "secondary": "#0060ac",
+                        "on-tertiary-fixed": "#351000",
+                        "on-background": "#1b1b24",
+                        "surface-container-low": "#f5f2ff",
+                        "outline": "#777587",
+                        "on-tertiary-container": "#ffd2be",
+                        "tertiary-container": "#a44100",
+                        "on-tertiary-fixed-variant": "#7b2f00",
+                        "primary-container": "#4f46e5",
+                        "on-secondary-fixed": "#001c39",
+                        "primary-fixed-dim": "#c3c0ff",
+                        "on-surface-variant": "#464555",
+                        "inverse-surface": "#302f39",
+                        "error-container": "#ffdad6",
+                        "surface-bright": "#fcf8ff",
+                        "inverse-on-surface": "#f3effc",
+                        "surface-tint": "#4d44e3",
+                        "secondary-fixed": "#d4e3ff",
+                        "on-secondary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "gutter": "24px",
+                        "container-max-width": "1280px",
+                        "margin-desktop": "40px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Inter"],
+                        "headline-sm": ["Plus Jakarta Sans"],
+                        "headline-xl": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "700"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-xl": ["48px", {"lineHeight": "60px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-background dark:bg-background text-primary dark:text-inverse-primary docked full-width top-0 flat no shadows flex justify-between items-center w-full px-margin-mobile h-16 shrink-0 z-50">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:bg-surface-container-high rounded-full p-2 transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-headline-md font-headline-md font-bold text-primary dark:text-inverse-primary">Creatick</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:bg-surface-container-high rounded-full p-2 transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<img alt="creator_profile_photo" class="w-8 h-8 rounded-full object-cover" data-alt="A close-up studio portrait of a young Indonesian male creator with a friendly smile. He has short dark hair and is wearing a vibrant orange hoodie that pops against a clean, soft white background. The lighting is bright and warm, reflecting a modern, energetic lifestyle brand aesthetic. The focus is sharp on his face, creating a professional yet approachable avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkagJ7KtEkS0elEri8J7_-eTZNWM9s9CkH0cJn_xInWRHpH21nF85dTToqKfxIVY6kSGeB9KekceMDkyeLbysqrH0jDJxCr23GAfXz5C4hSEtqlku4aMMRDXGXSVdsZ5ZdmG4slWoQeQjf4i8ePZG1rLyGCAS291ww6F_8O602-pLrZ1KmGBq2Wlomoyg82UWnB6s7Ek_HlKY0JBdVzUBcOafQsD0FlTK0mG13XcR0IFNnttFXANrAaAn_f-XpB7nZE1QgPck5xfY"/>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full max-w-container-max-width mx-auto px-margin-mobile md:px-margin-desktop py-8 md:py-12 pb-32">
+<div class="max-w-3xl mx-auto">
+<!-- Stepper -->
+<div class="mb-10 flex items-center justify-between relative">
+<div class="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-surface-variant -z-10 rounded-full"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center text-label-md font-label-md shadow-sm">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<span class="text-label-md font-label-md text-on-surface-variant hidden md:block">Info Event</span>
+</div>
+<div class="flex flex-col items-center gap-2 relative">
+<div class="absolute right-full top-4 -translate-y-1/2 w-[calc(100vw-6rem)] md:w-[200px] h-1 bg-primary -z-10"></div>
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center text-label-md font-label-md shadow-sm ring-4 ring-primary-container/20">
+                        2
+                    </div>
+<span class="text-label-md font-label-md text-primary font-bold hidden md:block">Tiket</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center text-label-md font-label-md shadow-sm border border-outline-variant">
+                        3
+                    </div>
+<span class="text-label-md font-label-md text-on-surface-variant hidden md:block">Tim</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center text-label-md font-label-md shadow-sm border border-outline-variant">
+                        4
+                    </div>
+<span class="text-label-md font-label-md text-on-surface-variant hidden md:block">Publikasi</span>
+</div>
+</div>
+<!-- Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+<div>
+<h2 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-on-background mb-2">Tipe Tiket</h2>
+<p class="text-body-md font-body-md text-on-surface-variant">Atur jenis tiket yang akan dijual untuk event Anda.</p>
+</div>
+<button class="bg-surface-container-lowest border border-outline text-on-surface text-label-md font-label-md px-4 py-2 rounded-full hover:bg-surface-container-high transition-colors flex items-center justify-center gap-2 shadow-[0px_4px_20px_rgba(79,70,229,0.05)] w-full md:w-auto">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+                    Preview Tiket
+                </button>
+</div>
+<!-- Ticket List -->
+<div class="space-y-4 mb-8">
+<!-- Ticket Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0px_4px_20px_rgba(79,70,229,0.05)] border border-outline-variant/30 relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1.5 h-full bg-primary"></div>
+<div class="flex justify-between items-start mb-4">
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface">Regular</h3>
+<span class="bg-primary/10 text-primary text-label-md font-label-md px-2 py-0.5 rounded-full text-xs">Aktif</span>
+</div>
+<p class="text-headline-md font-headline-md text-primary font-bold">Rp 150.000</p>
+</div>
+<div class="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+<button class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors" title="Edit">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-error-container/50 hover:bg-error-container flex items-center justify-center text-error transition-colors" title="Hapus">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-6">
+<div class="bg-surface p-3 rounded-lg border border-outline-variant/50">
+<span class="text-body-sm font-body-sm text-on-surface-variant block mb-1">Kuota Tersedia</span>
+<span class="text-label-md font-label-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary">group</span>
+                                100 Tiket
+                            </span>
+</div>
+<div class="bg-surface p-3 rounded-lg border border-outline-variant/50 flex items-center justify-between">
+<div>
+<span class="text-body-sm font-body-sm text-on-surface-variant block mb-1">Status Penjualan</span>
+<span class="text-label-md font-label-md text-on-surface">Buka</span>
+</div>
+<!-- Toggle Switch -->
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Ticket Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0px_4px_20px_rgba(79,70,229,0.05)] border border-outline-variant/30 relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1.5 h-full bg-tertiary"></div>
+<div class="flex justify-between items-start mb-4">
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface">VIP</h3>
+<span class="bg-primary/10 text-primary text-label-md font-label-md px-2 py-0.5 rounded-full text-xs">Aktif</span>
+</div>
+<p class="text-headline-md font-headline-md text-primary font-bold">Rp 500.000</p>
+</div>
+<div class="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+<button class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors" title="Edit">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-error-container/50 hover:bg-error-container flex items-center justify-center text-error transition-colors" title="Hapus">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-6">
+<div class="bg-surface p-3 rounded-lg border border-outline-variant/50">
+<span class="text-body-sm font-body-sm text-on-surface-variant block mb-1">Kuota Tersedia</span>
+<span class="text-label-md font-label-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-tertiary">star</span>
+                                20 Tiket
+                            </span>
+</div>
+<div class="bg-surface p-3 rounded-lg border border-outline-variant/50 flex items-center justify-between">
+<div>
+<span class="text-body-sm font-body-sm text-on-surface-variant block mb-1">Status Penjualan</span>
+<span class="text-label-md font-label-md text-on-surface">Buka</span>
+</div>
+<!-- Toggle Switch -->
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Add Button -->
+<button class="w-full py-4 border-2 border-dashed border-primary/30 rounded-xl text-primary text-label-md font-label-md hover:bg-primary/5 transition-colors flex flex-col items-center justify-center gap-2 group">
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-primary">add</span>
+</div>
+                    Tambah Tipe Tiket
+                </button>
+</div>
+</div>
+</main>
+<!-- Footer Action Bar -->
+<div class="fixed bottom-0 left-0 w-full bg-surface-container-lowest border-t border-outline-variant/20 p-4 shadow-[0px_-4px_20px_rgba(79,70,229,0.05)] z-40">
+<div class="max-w-container-max-width mx-auto flex justify-between items-center gap-4">
+<button class="text-on-surface-variant text-label-md font-label-md px-6 py-3 rounded-full hover:bg-surface-container-high transition-colors">
+                Kembali
+            </button>
+<button class="bg-primary text-on-primary text-label-md font-label-md px-8 py-3 rounded-full hover:bg-primary/90 transition-colors shadow-md active:scale-95 flex items-center gap-2">
+                Simpan &amp; Lanjut
+                <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</body></html>
