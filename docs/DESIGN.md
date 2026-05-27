@@ -173,5 +173,46 @@ Used for categories and status. These are always pill-shaped with low-opacity ba
 ### Icons
 Use **Filled** icons exclusively. This adds visual weight and complements the bold typography. Icons should be encased in a circular background when used as primary navigation triggers.
 
+**Implementation note:** The actual code uses Material Symbols Outlined with `FILL=1` via `fontVariationSettings` rather than the Filled variant. This achieves the same visual weight while keeping icon rendering consistent.
+
+### Back Button (Kembali)
+All back buttons must be positioned **left-aligned** consistently across all pages. Use `<BackButton />` component which renders a labeled left arrow. Do not place back buttons on the right side.
+
+### Bottom Navigation
+- Height: `h-16` (64px)
+- Padding: `pb-[calc(0.5rem+env(safe-area-inset-bottom))]` for notched devices
+- Active state: filled pill (`rounded-full bg-primary-container text-on-primary-container px-5 py-2`) surrounding the icon + label
+- Hidden on desktop (`md:hidden`), full browser width
+- 3-4 items: Beranda, Acara, Tiket Saya, Profil
+
+### Event Card Grid Density
+AcaraBrowse and similar card grids must show 4-5 cards on mobile viewport and 6-8 cards on desktop viewport.
+
+**Mobile (4-5 cards visible):**
+- `grid-cols-2 gap-3`
+- Compact card: no banner image, `p-3`, `text-[11px]` icons, `text-xs` labels
+- 2-line title clamp
+- Compact chip (smaller padding/font)
+
+**Desktop (6-8 cards visible):**
+- `lg:grid-cols-4 gap-4`
+- Cards may include compact banner (`aspect-[4/3]`), `p-3` or `p-4`
+
+### Dark Mode Implementation
+Dark mode uses localStorage key `creaticks-theme`. To prevent flash of unstyled content (FOUC) on page load, an inline `<script>` in `index.html` before `</head>` reads the value and applies `class="dark"` to `<html>` synchronously before first paint. The `useDarkMode` composable handles toggling and storage.
+
+### Missing CSS Tokens (Must Be Defined)
+The following tokens are used extensively in components but must be explicitly defined in `style.css`:
+
+```css
+/* Surface variant — used for card skeletons, empty states, input backgrounds */
+--color-surface-variant: #e7e1de;       /* light */
+--color-surface-variant: #3e3e5e;       /* dark */
+
+/* Primary fixed — used for active pills, selected states */
+--color-primary-fixed: #e2dfff;          /* light */
+--color-primary-fixed: #3323cc;          /* dark */
+```
+
 ### Progress Indicators
 Adopt a Duolingo-style thick progress bar with rounded ends, using the Primary Indigo color to show completion of event setup or ticket sales.

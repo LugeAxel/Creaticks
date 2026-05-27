@@ -25,3 +25,6 @@ dist-ssr
 
 .env
 !.env.example
+
+AGENTS.md
+WORKFLOW.md

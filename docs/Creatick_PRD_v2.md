@@ -96,8 +96,13 @@ inside one platform.
 - Ticket request system
 - Buyer-organizer chat system
 - Admin/team collaboration
+- Admin queue claiming (prevent double-messaging)
+- Auto-cancel unpaid tickets (30-minute deadline)
 - QR ticket generation
 - QR attendance system
+- Live attendance page (admin + creator)
+- Invoice system (creator only)
+- Data export (CSV and Excel for invoices and attendance)
 - Ticket customization
 - Mobile dashboards
 - Attendance tracking
@@ -359,6 +364,8 @@ Secondary font:
 
 # 10. Core Workflows
 
+For detailed workflows, screen mappings, and edge cases, see [WORKFLOW.md](./WORKFLOW.md).
+
 ## Event Creation Workflow
 1. Creator registers
 2. Creates event
@@ -395,6 +402,7 @@ Secondary font:
 - Push notifications
 - Staff-only scanner mode
 - Quick reply templates
+- Payment deadline extension from admin
 
 ## v2.2
 - Xendit integration
@@ -407,6 +415,7 @@ Secondary font:
 - AI moderation
 - Public creator profiles
 - Social event feeds
+- Multi-currency support
 
 ---
 

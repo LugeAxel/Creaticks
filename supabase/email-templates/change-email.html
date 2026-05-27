@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { margin: 0; padding: 0; background: #fef8f4; font-family: Inter, Arial, sans-serif; }
+    .wrapper { width: 100%; background: #fef8f4; padding: 40px 0; }
+    .card { max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 40px 32px; text-align: center; }
+    .logo { font-family: 'Plus Jakarta Sans', Arial, sans-serif; font-size: 24px; font-weight: 800; color: #3525cd; margin-bottom: 24px; }
+    h1 { font-family: 'Plus Jakarta Sans', Arial, sans-serif; font-size: 22px; font-weight: 700; color: #1a1525; margin: 0 0 12px; }
+    p { font-size: 15px; line-height: 1.6; color: #4a4458; margin: 0 0 24px; }
+    .btn { display: inline-block; padding: 14px 32px; background: #3525cd; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 12px; }
+    .footer { font-size: 13px; color: #8b8399; margin-top: 32px; }
+    .footer a { color: #3525cd; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <div class="logo">creaticks</div>
+      <h1>Konfirmasi Email Baru</h1>
+      <p>Kami menerima permintaan untuk mengubah alamat email akun Creaticks kamu menjadi <strong>{{ .NewEmail }}</strong>.<br/>Klik tombol di bawah untuk mengonfirmasi perubahan ini.</p>
+      <a href="{{ .ConfirmationURL }}" class="btn">Konfirmasi Email Baru</a>
+      <p style="margin-top: 24px; font-size: 14px; color: #8b8399;">Atau salin link ini ke browser:<br/>{{ .ConfirmationURL }}</p>
+      <div class="footer">
+        <p>Jika kamu tidak meminta perubahan email, abaikan email ini dan hubungi kami.</p>
+        <p><a href="{{ .SiteURL }}">Creaticks</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
