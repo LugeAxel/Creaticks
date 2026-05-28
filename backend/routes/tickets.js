@@ -7,6 +7,20 @@ import ExcelJS from 'exceljs'
 
 const router = Router()
 
+// Simple in-process lock map to serialize operations per event/tier.
+// Note: protects only this Node process. For multi-node deployments,
+// replace with DB-level transactions or an external lock system.
+const locks = new Map()
+function withLock(key, fn) {
+  const prev = locks.get(key) || Promise.resolve()
+  const promise = prev.then(() => fn())
+  locks.set(key, promise)
+  promise.finally(() => {
+    if (locks.get(key) === promise) locks.delete(key)
+  })
+  return promise
+}
+
 router.get('/', requireAuth, async (req, res) => {
   const userId = req.user.id
 
@@ -28,6 +42,14 @@ router.get('/', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal mengambil tiket' })
   }
 
+  // Fetch thread IDs for all tickets
+  const ticketIds = tickets.map(t => t.id)
+  const { data: threads } = await supabaseAdmin
+    .from('chat_threads')
+    .select('ticket_request_id, id')
+    .in('ticket_request_id', ticketIds)
+  const threadMap = Object.fromEntries((threads || []).map(th => [th.ticket_request_id, th.id]))
+
   const result = tickets.map(t => ({
     id: t.id,
     event_id: t.event_id,
@@ -36,14 +58,15 @@ router.get('/', requireAuth, async (req, res) => {
     event_location: t.events?.location || '',
     tier_name: t.tier_name || 'Regular',
     status: t.status || 'pending',
-    qr_data: t.id
+    qr_data: t.id,
+    thread_id: threadMap[t.id] || null
   }))
 
   res.json({ tickets: result })
 })
 
 router.post('/', requireAuth, async (req, res) => {
-  const { event_id, items } = req.body
+  const { event_id, items, seat_ids } = req.body
 
   if (!event_id) {
     return res.status(400).json({ error: 'event_id wajib diisi' })
@@ -51,6 +74,36 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Minimal satu tiket harus dipilih' })
+  }
+
+  // Validate seat IDs if provided
+  if (seat_ids && Array.isArray(seat_ids) && seat_ids.length > 0) {
+    const sessionId = `session_${req.user.id}_${Date.now()}`
+    const { data: seatCheck, error: seatCheckError } = await supabaseAdmin
+      .from('venue_seats')
+      .select('id, status, reserved_by')
+      .in('id', seat_ids)
+      .eq('event_id', event_id)
+
+    if (seatCheckError) {
+      return res.status(500).json({ error: 'Gagal memvalidasi kursi' })
+    }
+
+    if (!seatCheck || seatCheck.length !== seat_ids.length) {
+      return res.status(400).json({ error: 'Beberapa kursi tidak ditemukan', code: 'SEAT_INVALID' })
+    }
+
+    const unavailableSeats = seatCheck.filter(s =>
+      s.status !== 'reserved' || (s.reserved_by && !s.reserved_by.startsWith('session_'))
+    )
+
+    if (unavailableSeats.length > 0) {
+      return res.status(409).json({
+        error: `${unavailableSeats.length} kursi sudah tidak tersedia`,
+        code: 'SEAT_UNAVAILABLE',
+        seats: unavailableSeats.map(s => s.id)
+      })
+    }
   }
 
   const { data: event, error: eventError } = await supabaseAdmin
@@ -86,6 +139,31 @@ router.post('/', requireAuth, async (req, res) => {
     })
   }
 
+  const { data: pendingRequests, error: pendingRequestsError } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('id')
+    .eq('event_id', event_id)
+    .eq('user_id', req.user.id)
+    .eq('status', 'pending')
+    .limit(1)
+
+  if (pendingRequestsError) {
+    logger.error('TICKETS-CREATE', 'Failed to check existing requests', {
+      requestId: req.requestId,
+      userId: req.user.id,
+      eventId: event_id,
+      error: pendingRequestsError.message
+    })
+    return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
+  }
+
+  if (pendingRequests && pendingRequests.length > 0) {
+    return res.status(409).json({
+      error: 'Kamu sudah memiliki permintaan tiket menunggu pembayaran untuk acara ini',
+      code: 'ACTIVE_TICKET_REQUEST_EXISTS'
+    })
+  }
+
   const tierNames = [...new Set(items.map(i => i.tier_name))]
   const { data: tiers, error: tiersError } = await supabaseAdmin
     .from('ticket_tiers')
@@ -108,81 +186,81 @@ router.post('/', requireAuth, async (req, res) => {
 
   const created = []
 
-  for (const item of items) {
-    const tier = tierMap[item.tier_name]
-    const quantity = item.quantity || 1
+  try {
+    for (const item of items) {
+      const tier = tierMap[item.tier_name]
+      const quantity = item.quantity || 1
 
-    if (tier.quota > 0) {
-      const { count: existingCount, error: countError } = await supabaseAdmin
-        .from('ticket_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('event_id', event_id)
-        .eq('tier_name', item.tier_name)
-        .not('status', 'in', '("cancelled","completed")')
+      // Use DB-level atomic reservation via Postgres function `reserve_ticket_requests`.
+      try {
+        const { data: reserved, error: rpcErr } = await supabaseAdmin.rpc('reserve_ticket_requests', {
+          _event_id: event_id,
+          _tier_name: item.tier_name,
+          _user_id: req.user.id,
+          _quantity: quantity
+        })
 
-      if (!countError && existingCount !== null) {
-        const available = tier.quota - existingCount
-        if (available < quantity) {
-          logger.warn('TICKETS-CREATE', 'Not enough tickets available', {
-            requestId: req.requestId,
-            tierName: item.tier_name,
-            requested: quantity,
-            available: Math.max(0, available)
-          })
-          return res.status(409).json({
-            error: `Tiket ${item.tier_name} tidak mencukupi. Sisa: ${Math.max(0, available)}`,
-            code: 'NOT_ENOUGH_TICKETS',
-            available: Math.max(0, available)
+        if (rpcErr) {
+          // Map known DB exceptions to user-friendly responses
+          const msg = (rpcErr.message || '').toUpperCase()
+          if (msg.includes('NOT_ENOUGH_TICKETS')) {
+            return res.status(409).json({ error: `Tiket ${item.tier_name} tidak mencukupi`, code: 'NOT_ENOUGH_TICKETS' })
+          }
+          if (msg.includes('TIER_NOT_FOUND')) {
+            return res.status(400).json({ error: `Tipe tiket ${item.tier_name} tidak ditemukan` })
+          }
+          logger.error('TICKETS-CREATE', 'RPC error', { requestId: req.requestId, error: rpcErr.message })
+          return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
+        }
+
+        // RPC returns rows of created ticket_requests
+        if (Array.isArray(reserved)) {
+          reserved.forEach(r => created.push(r))
+        } else if (reserved) {
+          created.push(reserved)
+        }
+      } catch (e) {
+        logger.error('TICKETS-CREATE', 'Reserve RPC failed', { requestId: req.requestId, error: e?.message || String(e) })
+        return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
+      }
+    }
+  } catch (err) {
+    if (err && err.status && err.body) {
+      return res.status(err.status).json(err.body)
+    }
+    logger.error('TICKETS-CREATE', 'Unhandled error during ticket creation', { requestId: req.requestId, error: err?.message || String(err) })
+    return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
+  }
+
+  // Link provided seat IDs to the created ticket requests
+  if (seat_ids && Array.isArray(seat_ids) && seat_ids.length > 0 && created.length > 0) {
+    const firstTicketId = created[0].id
+    const { error: linkError } = await supabaseAdmin
+      .from('venue_seats')
+      .update({
+        status: 'reserved',
+        reserved_by: firstTicketId,
+        reserved_until: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      })
+      .in('id', seat_ids)
+
+    if (linkError) {
+      logger.error('TICKETS-CREATE', 'Failed to link seats', {
+        requestId: req.requestId,
+        seatIds: seat_ids,
+        error: linkError.message
+      })
+    } else {
+      const ioSeats = req.app.get('io')
+      if (ioSeats) {
+        for (const seatId of seat_ids) {
+          ioSeats.to(`event:${event_id}:seats`).emit('SEAT_UPDATE', {
+            seatId,
+            status: 'reserved',
+            reservedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString()
           })
         }
       }
-    }
-
-    const { data: existingRequest } = await supabaseAdmin
-      .from('ticket_requests')
-      .select('id, status')
-      .eq('event_id', event_id)
-      .eq('user_id', req.user.id)
-      .eq('tier_name', item.tier_name)
-      .not('status', 'in', '("cancelled","completed")')
-      .maybeSingle()
-
-    if (existingRequest) {
-      logger.warn('TICKETS-CREATE', 'Duplicate ticket request', {
-        requestId: req.requestId,
-        userId: req.user.id,
-        tierName: item.tier_name
-      })
-      return res.status(409).json({
-        error: `Kamu sudah memiliki permintaan tiket ${item.tier_name} yang aktif untuk acara ini`,
-        code: 'DUPLICATE_REQUEST',
-        existing_status: existingRequest.status
-      })
-    }
-
-    for (let i = 0; i < quantity; i++) {
-      const isFree = tier.price === 0
-      const { data: ticket, error: insertError } = await supabaseAdmin
-        .from('ticket_requests')
-        .insert({
-          event_id,
-          user_id: req.user.id,
-          tier_name: item.tier_name,
-          status: isFree ? 'confirmed' : 'pending',
-          payment_deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        logger.error('TICKETS-CREATE', 'Failed to create ticket request', {
-          requestId: req.requestId,
-          error: insertError.message
-        })
-        return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
-      }
-
-      created.push(ticket)
     }
   }
 
@@ -213,6 +291,50 @@ router.post('/', requireAuth, async (req, res) => {
       event_id,
       'event'
     )
+  }
+
+  // Ensure chat threads exist for newly created ticket requests and add an initial system message
+  for (const t of created) {
+    try {
+      const { data: existingThread } = await supabaseAdmin
+        .from('chat_threads')
+        .select('id')
+        .eq('ticket_request_id', t.id)
+        .maybeSingle()
+
+      let threadId = existingThread?.id
+      if (!threadId) {
+        const { data: newThread, error: threadErr } = await supabaseAdmin
+          .from('chat_threads')
+          .insert({
+            ticket_request_id: t.id,
+            event_id: t.event_id,
+            buyer_id: t.user_id
+          })
+          .select()
+          .single()
+
+        if (threadErr) {
+          logger.warn('TICKETS-CREATE', 'Failed to create chat thread', { requestId: req.requestId, ticketId: t.id, error: threadErr.message })
+        } else {
+          threadId = newThread.id
+
+          // initial system message for admin awareness
+          await supabaseAdmin.from('chat_messages').insert({
+            thread_id: threadId,
+            sender_id: req.user.id,
+            message_type: 'system',
+            content: `Permintaan tiket ${t.tier_name} dibuat oleh ${requesterName}.`
+          })
+
+          if (io) {
+            io.to(`event:${t.event_id}:admins`).emit('chat:new_thread', { thread_id: threadId, ticket_request: t })
+          }
+        }
+      }
+    } catch (e) {
+      logger.error('TICKETS-CREATE', 'Error ensuring chat thread', { requestId: req.requestId, ticketId: t.id, error: e?.message || String(e) })
+    }
   }
 
   logger.info('TICKETS-CREATE', 'Ticket requests created', {
@@ -246,18 +368,32 @@ router.get('/:id', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Bukan tiket kamu' })
   }
 
+  if (!['confirmed','completed'].includes(ticket.status)) {
+    return res.status(403).json({ error: 'Tiket belum aktif', code: 'TICKET_NOT_ACTIVE' })
+  }
+
+  // Fetch thread_id
+  const { data: thread } = await supabaseAdmin
+    .from('chat_threads')
+    .select('id')
+    .eq('ticket_request_id', id)
+    .maybeSingle()
+
   const { data: user } = await supabaseAdmin.auth.admin.getUserById(userId)
   const holderName = user?.user?.user_metadata?.name || user?.user?.email || 'Unknown'
 
   const result = {
     id: ticket.id,
+    event_id: ticket.event_id,
     event_title: ticket.events?.title || '',
     event_date: ticket.events?.date || '',
     event_location: ticket.events?.location || '',
     event_banner: ticket.events?.banner_url || '',
     holder_name: holderName,
     tier_name: ticket.tier_name || 'Regular',
-    qr_data: ticket.id
+    status: ticket.status,
+    qr_data: ticket.id,
+    thread_id: thread?.id || null
   }
 
   res.json({ ticket: result })
@@ -302,18 +438,50 @@ router.put('/:id/status', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Tiket sudah diproses sebelumnya' })
   }
 
-  const { error: updateError } = await supabaseAdmin
-    .from('ticket_requests')
-    .update({ status })
-    .eq('id', id)
+  // Serialize confirm path to avoid race updating sold_count
+  const lockKey = `event:${ticket.event_id}:tier:${ticket.tier_name}`
+  try {
+    await withLock(lockKey, async () => {
+      const { error: updateError } = await supabaseAdmin
+        .from('ticket_requests')
+        .update({ status })
+        .eq('id', id)
 
-  if (updateError) {
-    logger.error('TICKETS-STATUS', 'Failed to update ticket status', {
-      requestId: req.requestId,
-      ticketId: id,
-      status,
-      error: updateError.message
+      if (updateError) {
+        logger.error('TICKETS-STATUS', 'Failed to update ticket status', {
+          requestId: req.requestId,
+          ticketId: id,
+          status,
+          error: updateError.message
+        })
+        throw new Error('update_failed')
+      }
+
+      // When confirming, increment sold_count in ticket_tiers
+      if (status === 'confirmed') {
+        try {
+          const { data: tier } = await supabaseAdmin
+            .from('ticket_tiers')
+            .select('id, sold_count')
+            .eq('event_id', ticket.event_id)
+            .eq('name', ticket.tier_name)
+            .maybeSingle()
+
+          if (tier && tier.id) {
+            const newSold = (tier.sold_count || 0) + 1
+            await supabaseAdmin
+              .from('ticket_tiers')
+              .update({ sold_count: newSold })
+              .eq('id', tier.id)
+          }
+        } catch (e) {
+          logger.error('TICKETS-STATUS', 'Failed to increment sold_count', { requestId: req.requestId, error: e?.message || String(e) })
+        }
+      }
     })
+  } catch (err) {
+    if (err.message === 'update_failed') return res.status(500).json({ error: 'Gagal memperbarui status tiket' })
+    logger.error('TICKETS-STATUS', 'Error updating status', { requestId: req.requestId, error: err?.message || String(err) })
     return res.status(500).json({ error: 'Gagal memperbarui status tiket' })
   }
 
@@ -748,6 +916,94 @@ router.patch('/:id/extend-deadline', requireAuth, async (req, res) => {
   }
 
   res.json({ message: 'Batas waktu pembayaran berhasil diperpanjang', payment_deadline: newDeadline })
+})
+
+// Buyer submits transfer proof
+router.put('/:id/proof', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const { transfer_reference, sender_bank, transfer_amount, proof_image_url } = req.body
+
+  if (!transfer_reference || !transfer_reference.trim()) {
+    return res.status(400).json({ error: 'Nomor referensi wajib diisi' })
+  }
+  if (!sender_bank) {
+    return res.status(400).json({ error: 'Bank/e-wallet tujuan wajib diisi' })
+  }
+  if (!transfer_amount || transfer_amount <= 0) {
+    return res.status(400).json({ error: 'Jumlah transfer wajib diisi' })
+  }
+
+  const { data: ticket, error: fetchError } = await supabaseAdmin
+    .from('ticket_requests')
+    .select(`
+      *,
+      events!inner(title, creator_id)
+    `)
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !ticket) {
+    return res.status(404).json({ error: 'Tiket tidak ditemukan' })
+  }
+
+  if (ticket.user_id !== req.user.id) {
+    return res.status(403).json({ error: 'Akses ditolak' })
+  }
+
+  if (ticket.status !== 'pending') {
+    return res.status(400).json({ error: 'Hanya tiket pending yang dapat dikirim bukti transfer' })
+  }
+
+  // Get tier price for amount validation
+  const { data: tier } = await supabaseAdmin
+    .from('ticket_tiers')
+    .select('price')
+    .eq('event_id', ticket.event_id)
+    .eq('name', ticket.tier_name)
+    .maybeSingle()
+
+  const tierPrice = tier?.price || 0
+  if (transfer_amount < tierPrice) {
+    return res.status(400).json({ error: `Jumlah transfer minimal Rp ${tierPrice.toLocaleString('id-ID')}`, code: 'AMOUNT_MISMATCH' })
+  }
+
+  // Upsert invoice record with proof data
+  const { data: existingInvoice } = await supabaseAdmin
+    .from('invoices')
+    .select('id')
+    .eq('ticket_request_id', id)
+    .maybeSingle()
+
+  if (existingInvoice) {
+    await supabaseAdmin
+      .from('invoices')
+      .update({
+        transfer_reference: transfer_reference.trim(),
+        sender_bank,
+        transfer_amount,
+        proof_image_url: proof_image_url || ''
+      })
+      .eq('id', existingInvoice.id)
+  } else {
+    await supabaseAdmin
+      .from('invoices')
+      .insert({
+        ticket_request_id: id,
+        event_id: ticket.event_id,
+        buyer_name: 'Buyer',
+        ticket_type: ticket.tier_name,
+        quantity: 1,
+        unit_price: tierPrice,
+        total_amount: tierPrice,
+        transfer_reference: transfer_reference.trim(),
+        sender_bank,
+        transfer_amount,
+        proof_image_url: proof_image_url || '',
+        status: 'unpaid'
+      })
+  }
+
+  res.json({ message: 'Bukti transfer berhasil dikirim' })
 })
 
 // Fetch invoices for event

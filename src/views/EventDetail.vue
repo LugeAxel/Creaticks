@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { fetchWithRetry } from '@/lib/api'
 import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
@@ -6,6 +7,8 @@ import { useAuth } from '@/composables/useAuth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BackButton from '@/components/shared/BackButton.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SeatSelector from '@/components/seats/SeatSelector.vue'
+import type { SeatData, TierInfo } from '@/components/seats/SeatMap.vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -24,8 +27,30 @@ const mapError = ref('')
 
 const adminRoles = ref<string[] | null>(null)
 
+const seatMapEnabled = ref(false)
+const seatMapGrid = ref({ gridX: 25, gridY: 20 })
+const seats = ref<SeatData[]>([])
+const seatTiers = ref<TierInfo[]>([])
+const selectedSeatIds = ref<string[]>([])
+const sessionId = ref(`session_${Date.now()}_${Math.random().toString(36).slice(2)}`)
+const authToken = ref('')
+
 const isCreator = computed(() => {
   return user.value && event.value && user.value.id === event.value.creator_id
+})
+
+const hasSelectedTier = computed(() => {
+  if (!event.value?.ticket_tiers) return false
+  return event.value.ticket_tiers.some((t: any) => (quantities.value[t.id] || 0) > 0)
+})
+
+const maxSeatsNeeded = computed(() => {
+  if (!event.value?.ticket_tiers) return 0
+  let total = 0
+  for (const tier of event.value.ticket_tiers) {
+    total += quantities.value[tier.id] || 0
+  }
+  return total || 1
 })
 
 const isAdmin = computed(() => {
@@ -159,13 +184,19 @@ const handleRequestTicket = async () => {
       return
     }
 
-    const res = await fetch('/api/tickets', {
+    const body: any = { event_id: event.value.id, items }
+
+    if (seatMapEnabled.value && selectedSeatIds.value.length > 0) {
+      body.seat_ids = selectedSeatIds.value
+    }
+
+    const res = await fetchWithRetry('/api/tickets', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`
       },
-      body: JSON.stringify({ event_id: event.value.id, items })
+      body: JSON.stringify(body)
     })
 
     const data = await res.json()
@@ -187,12 +218,37 @@ const handleRequestTicket = async () => {
   }
 }
 
+async function loadSeats() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    authToken.value = session.access_token
+
+    const res = await fetch(`/api/events/${eventId}/seats/public`)
+    if (res.ok) {
+      const data = await res.json()
+      seats.value = (data.seats || []).map((s: any) => ({
+        id: s.id,
+        seat_code: s.seat_code,
+        tier_id: s.tier_id,
+        x: s.x,
+        y: s.y,
+        status: s.status,
+        reserved_until: s.reserved_until
+      }))
+    }
+  } catch {
+    // seat loading is optional
+  }
+}
+
 onMounted(async () => {
   try {
     const headers: Record<string, string> = {}
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.access_token) {
       headers.Authorization = `Bearer ${session.access_token}`
+      authToken.value = session.access_token
     }
     const res = await fetch(`/api/events/${eventId}`, { headers })
     if (res.ok) {
@@ -201,9 +257,33 @@ onMounted(async () => {
       if (data.adminRole) {
         adminRoles.value = data.adminRole
       }
+
+      if (event.value?.seat_map) {
+        const sm = typeof event.value.seat_map === 'string'
+          ? JSON.parse(event.value.seat_map)
+          : event.value.seat_map
+        if (sm && sm.gridX && sm.gridY) {
+          seatMapEnabled.value = true
+          seatMapGrid.value = { gridX: sm.gridX, gridY: sm.gridY }
+        }
+      }
+
+      if (event.value?.ticket_tiers) {
+        seatTiers.value = event.value.ticket_tiers.map((t: any) => ({
+          id: t.id,
+          name: t.name || 'Regular',
+          price: t.price || 0,
+          color: t.color || '#6C63FF'
+        }))
+      }
+
       if (event.value?.location) {
         geocodeLocation(event.value.location)
       }
+    }
+
+    if (seatMapEnabled.value) {
+      await loadSeats()
     }
   } catch {
     // fallback
@@ -211,6 +291,10 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+function onSeatSelectionChange(ids: string[]) {
+  selectedSeatIds.value = ids
+}
 </script>
 
 <template>
@@ -306,7 +390,10 @@ onMounted(async () => {
             <div v-for="tier in (event.ticket_tiers || [])" :key="tier.id" class="bg-surface-card rounded-2xl border border-border/50 p-5 relative overflow-hidden">
               <div class="flex items-start justify-between mb-3">
                 <div>
-                  <h3 class="text-headline-sm font-heading font-semibold text-text-heading">{{ tier.name || 'Regular' }}</h3>
+                  <h3 class="text-headline-sm font-heading font-semibold text-text-heading">
+                    <span class="inline-block w-3 h-3 rounded-full mr-2 align-middle" :style="{ backgroundColor: tier.color || '#6C63FF' }"></span>
+                    {{ tier.name || 'Regular' }}
+                  </h3>
                   <p class="text-sm text-text-muted mt-0.5">{{ tier.description || '' }}</p>
                 </div>
                 <p class="text-lg font-heading font-bold text-primary">Rp {{ (tier.price || 0).toLocaleString('id-ID') }}</p>
@@ -337,12 +424,41 @@ onMounted(async () => {
         </div>
       </div>
 
+      <div v-if="seatMapEnabled && !isCreator && !isAdmin" class="mt-6">
+        <h2 class="text-lg font-heading font-bold text-text-heading mb-4">Pilih Kursi</h2>
+        <p class="text-sm text-text-muted mb-4">
+          Pilih jumlah tiket terlebih dahulu, lalu pilih kursi yang tersedia di peta.
+        </p>
+        <template v-if="seats.length > 0">
+          <SeatSelector
+            v-if="authToken"
+            :seats="seats"
+            :gridX="seatMapGrid.gridX"
+            :gridY="seatMapGrid.gridY"
+            :tiers="seatTiers"
+            :sessionId="sessionId"
+            :authToken="authToken"
+            :maxSeats="maxSeatsNeeded"
+            @change="onSeatSelectionChange"
+          />
+          <p v-if="!hasSelectedTier" class="mt-3 text-xs text-amber-600 text-center">Pilih setidaknya satu tiket untuk mulai memilih kursi</p>
+        </template>
+        <div v-else class="bg-surface-card rounded-xl border border-border/50 p-8 text-center">
+          <span class="material-symbols-outlined text-4xl text-text-muted mb-3">event_seat</span>
+          <h3 class="text-sm font-semibold text-text-heading mb-1">Kursi Belum Tersedia</h3>
+          <p class="text-xs text-text-muted">Penyelenggara belum mengatur konfigurasi kursi untuk acara ini. Kamu tetap bisa memesan tiket tanpa memilih kursi.</p>
+        </div>
+      </div>
+
       <div v-if="totalPrice > 0 && !isCreator" class="fixed bottom-16 md:bottom-0 left-0 right-0 md:static md:mt-6 bg-surface-card border-t border-border/50 md:border md:rounded-2xl md:border-border/50 p-4 md:p-6 max-w-screen-md md:mx-auto z-40">
         <p v-if="requestError" class="text-sm text-error mb-3 text-center">{{ requestError }}</p>
         <div class="max-w-screen-md mx-auto flex items-center justify-between">
           <div>
             <p class="text-xs text-text-muted">Total</p>
             <p class="text-xl font-heading font-bold text-text-heading">Rp {{ totalPrice.toLocaleString('id-ID') }}</p>
+            <p v-if="seatMapEnabled && selectedSeatIds.length > 0" class="text-xs text-primary mt-1">
+              {{ selectedSeatIds.length }} kursi dipilih
+            </p>
           </div>
           <BaseButton variant="primary" size="lg" :loading="requestLoading" @click="handleRequestTicket">
             {{ requestLoading ? 'Memproses...' : 'Minta Tiket' }}

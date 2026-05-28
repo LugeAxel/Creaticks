@@ -23,7 +23,7 @@ router.post('/', requireAuth, (req, res) => {
     }
 
     try {
-      const allowedFolders = ['creaticks', 'banners', 'avatars', 'payment-proofs']
+      const allowedFolders = ['creaticks', 'banners', 'avatars', 'payment-proofs', 'ticket-designs']
       const requestedFolder = req.body.folder || 'creaticks'
       const folder = allowedFolders.includes(requestedFolder) ? requestedFolder : 'creaticks'
       const result = await uploadToCloudinary(req.file.buffer, folder)

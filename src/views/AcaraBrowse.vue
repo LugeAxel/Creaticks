@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
-
-const router = useRouter()
+import EventCard from '@/components/shared/EventCard.vue'
 
 interface EventItem {
   id: string
@@ -45,25 +43,6 @@ const filteredEvents = computed(() => {
   }
   return result
 })
-
-const formatDate = (dateStr: string) => {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-const formatTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-}
-
-const formatFormat = (fmt: string) => {
-  const map: Record<string, string> = { offline: 'Offline', online: 'Online', hybrid: 'Hybrid' }
-  return map[fmt] || fmt
-}
-
-const goToEvent = (id: string) => {
-  router.push({ name: 'event-detail', params: { id } })
-}
 
 const reload = () => {
   window.location.reload()
@@ -138,7 +117,7 @@ onUnmounted(() => {
 
 <template>
   <AppLayout>
-    <div class="max-w-3xl mx-auto px-4 md:px-6 py-6">
+    <div class="max-w-5xl mx-auto px-4 md:px-6 py-6">
       <div class="mb-4">
         <h1 class="text-2xl font-heading font-bold text-text-heading">Acara</h1>
         <p class="text-sm text-text-muted mt-1">Temukan acara menarik untuk kamu</p>
@@ -194,39 +173,12 @@ onUnmounted(() => {
         </p>
       </div>
 
-      <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        <div
+      <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
+        <EventCard
           v-for="event in filteredEvents"
           :key="event.id"
-          class="bg-surface-card rounded-2xl border border-border/50 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-          @click="goToEvent(event.id)"
-        >
-          <div class="aspect-[4/3] bg-surface-variant overflow-hidden">
-            <img v-if="event.banner_url" :src="event.banner_url" class="w-full h-full object-cover" loading="lazy" />
-            <div v-else class="w-full h-full flex items-center justify-center">
-              <span class="material-symbols-outlined text-3xl text-text-muted">image</span>
-            </div>
-          </div>
-          <div class="p-3">
-            <div class="flex items-center gap-1.5 mb-1.5">
-              <span class="text-[10px] font-semibold text-primary bg-primary/5 px-2 py-0.5 rounded-full">
-                {{ event.category || 'Umum' }}
-              </span>
-              <span class="text-[10px] font-semibold text-secondary bg-secondary/5 px-2 py-0.5 rounded-full">
-                {{ formatFormat(event.event_format) }}
-              </span>
-            </div>
-            <h3 class="font-heading font-bold text-text-heading text-xs line-clamp-2 mb-1">{{ event.title }}</h3>
-            <p class="text-[10px] text-text-muted flex items-center gap-1">
-              <span class="material-symbols-outlined text-[11px]">calendar_today</span>
-              {{ formatDate(event.date) }}
-            </p>
-            <p v-if="event.location" class="text-[10px] text-text-muted flex items-center gap-1 mt-0.5">
-              <span class="material-symbols-outlined text-[11px]">location_on</span>
-              <span class="truncate">{{ event.location }}</span>
-            </p>
-          </div>
-        </div>
+          :event="event"
+        />
       </div>
     </div>
   </AppLayout>

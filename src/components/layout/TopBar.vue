@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import NotificationBell from './NotificationBell.vue'
+import ConnectionStatus from '@/components/shared/ConnectionStatus.vue'
 import { useDarkMode } from '@/composables/useDarkMode'
 import type { User } from '@supabase/supabase-js'
 
@@ -51,7 +52,8 @@ const getInitial = (u: User | null | undefined) => {
     <div class="flex items-center gap-1">
       <NotificationBell v-if="user" />
       <template v-if="user">
-        <div class="relative">
+        <div class="relative flex items-center">
+          <ConnectionStatus />
           <button
             class="w-9 h-9 rounded-full flex items-center justify-center overflow-hidden border-2 border-border/50 hover:border-primary/50 transition-all duration-200 cursor-pointer"
             @click="toggleDropdown"

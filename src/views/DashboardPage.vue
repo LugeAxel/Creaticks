@@ -65,26 +65,28 @@ onMounted(async () => {
             <div
               v-for="ticket in activeTickets"
               :key="ticket.id"
-              class="min-w-[280px] md:min-w-[320px] snap-start bg-surface-card rounded-2xl border border-border/50 overflow-hidden shrink-0 shadow-sm"
+              class="relative min-w-[280px] md:min-w-[340px] snap-start shrink-0"
             >
-              <div class="h-32 bg-primary/10 relative overflow-hidden">
-                <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle, #3525cd 1px, transparent 1px); background-size: 16px 16px;"></div>
+              <div class="absolute inset-0 translate-x-1.5 translate-y-1.5 bg-primary/15 rounded-2xl" />
+              <div class="relative bg-surface-card rounded-2xl border border-border/50 overflow-hidden shadow-sm">
+              <div class="h-32 bg-gradient-to-br from-primary to-primary-dark relative">
+                <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle, #fff 1px, transparent 1px); background-size: 16px 16px;"></div>
                 <div class="absolute bottom-3 left-4 right-4">
                   <h3 class="text-white font-heading font-bold text-lg drop-shadow-sm">{{ ticket.event_name }}</h3>
                   <p class="text-white/80 text-xs">{{ formatDate(ticket.event_date) }}</p>
                 </div>
-                <div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
               </div>
-              <div class="relative border-t-2 border-dashed border-border/50 px-4 py-4">
-                <div class="absolute -top-[9px] -left-[9px] w-[18px] h-[18px] rounded-full bg-surface"></div>
-                <div class="absolute -top-[9px] -right-[9px] w-[18px] h-[18px] rounded-full bg-surface"></div>
+              <div class="px-4 py-4">
                 <div class="flex items-center justify-between mb-3">
                   <div>
                     <p class="text-sm font-semibold text-text-heading">{{ ticket.tier_name || 'Regular' }}</p>
                     <p class="text-xs text-text-muted">{{ ticket.ticket_id }}</p>
                   </div>
-                  <span class="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-success/10 text-success border border-success/20">
-                    Aktif
+                  <span
+                    class="text-[10px] font-semibold px-2.5 py-1 rounded-full"
+                    :class="ticket.status === 'confirmed' ? 'bg-success/10 text-success border border-success/20' : ticket.status === 'pending' ? 'bg-warning/10 text-warning border border-warning/20' : 'bg-error/10 text-error border border-error/20'"
+                  >
+                    {{ ticket.status === 'confirmed' ? 'Aktif' : ticket.status === 'pending' ? 'Menunggu' : 'Batal' }}
                   </span>
                 </div>
                 <BaseButton variant="primary" size="sm" fullWidth @click="router.push(`/tickets/${ticket.id}`)">
@@ -93,6 +95,7 @@ onMounted(async () => {
               </div>
             </div>
           </div>
+        </div>
         </div>
 
         <div v-else class="mb-8 bg-surface-card rounded-2xl border border-border/50 p-8 text-center">

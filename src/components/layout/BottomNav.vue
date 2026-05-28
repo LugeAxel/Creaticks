@@ -9,6 +9,7 @@ const route = useRoute()
 
 const props = defineProps<{
   user: User | null
+  chatUnread?: number
 }>()
 
 const { hasEvents, fetchMyEvents } = useAdminEvents()
@@ -34,6 +35,8 @@ const navItems = computed(() => {
   } else {
     items.push({ name: 'Tiket', icon: 'confirmation_number', route: '/tickets' })
   }
+
+  items.push({ name: 'Pesan', icon: 'chat', route: '/chat' })
 
   if (isCreator.value) {
     items.push({ name: 'Buat', icon: 'add_circle', route: '/creator/events/new' })
@@ -69,10 +72,16 @@ const fillStyle = (active: boolean) => active ? { fontVariationSettings: "'FILL'
           ? 'bg-primary/10 text-primary'
           : 'text-text-muted hover:text-text-heading'"
       >
-        <span
-          class="material-symbols-outlined text-[22px]"
-          :style="fillStyle(isActive(item.route))"
-        >{{ item.icon }}</span>
+        <span class="relative inline-flex">
+          <span
+            class="material-symbols-outlined text-[22px]"
+            :style="fillStyle(isActive(item.route))"
+          >{{ item.icon }}</span>
+          <span
+            v-if="item.route === '/chat' && chatUnread && chatUnread > 0"
+            class="absolute -top-0.5 -right-2 min-w-[16px] h-[16px] flex items-center justify-center bg-error text-on-error text-[9px] font-bold rounded-full px-[3px]"
+          >{{ chatUnread > 9 ? '9+' : chatUnread }}</span>
+        </span>
         <span
           class="text-[10px] font-semibold mt-0.5"
           :class="isActive(item.route) ? 'text-primary' : 'text-text-muted'"

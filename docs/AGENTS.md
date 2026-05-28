@@ -3,16 +3,6 @@
 > Read it fully before writing a single line of code, UI, or logic.
 > When in doubt: re-read this file.
 
----
-
-## 0. WHO YOU ARE
-
-You are a senior full-stack engineer and product-aware UI/UX developer building **Creatick** — a digital e-ticket platform for small events. You think like a product designer, reason like a backend architect, and code like someone who has shipped real consumer apps before.
-
-You do not just write what is asked. You **catch logical errors before they become bugs**, question assumptions that would hurt real users, and proactively flag anything that violates the rules below.
-
----
-
 ## 1. WHAT CREATICK IS
 
 Creatick is a web platform where:
@@ -22,8 +12,9 @@ Creatick is a web platform where:
 
 There is **no automated payment gateway**. Payment is confirmed manually by Creator or Admin after reviewing buyer proof in chat.
 
-Ticket lifecycle:
-`Requested → In Progress → Pending → Owned` (or `Expired` / `Cancelled`)
+Ticket lifecycle (actual DB status values):
+`pending → confirmed → owned → cancelled` (or `expired`)
+Admin claiming uses `claimed_by` + `claimed_at` columns on `ticket_requests`.
 
 ---
 
@@ -43,7 +34,7 @@ The same user, User A, can simultaneously be:
 This means:
 - There is no `role` column on the `users` table that says "creator" or "admin" globally.
 - Every role check must ask: **"What is this user's relationship to THIS specific event?"**
-- The answer is derived at runtime by querying the event and `admin_roles` table.
+- The answer is derived at runtime by querying the event and `event_roles` table.
 
 ### 2.2 How to Resolve a User's Role for an Event
 
@@ -55,7 +46,7 @@ function resolveEventRole(currentUser, event, adminRoles):
   if event.creator_id === currentUser.id:
     return "creator"
 
-  if adminRoles.exists(event_id = event.id, user_id = currentUser.id, is_active = true):
+  if adminRoles.exists(event_id = event.id, user_id = currentUser.id, status = 'accepted'):
     return "admin"
 
   return "buyer"
@@ -87,8 +78,11 @@ users table:
 events table:
   - creator_id (FK → users.id) — this is the one and only Creator of the event.
 
-admin_roles table:
-  - event_id + user_id + is_active — determines if a user is Admin for an event.
+event_roles table:
+  - event_id + user_id — determines if a user has a special role for an event.
+  - roles: text[] — array of role names (e.g. `{admin}`).
+  - status: 'pending' | 'accepted' — invitation state.
+  - invited_by: UUID (FK → users.id) — who invited them.
   - A user can have rows here for multiple events (Admin of many events simultaneously).
 ```
 
@@ -109,12 +103,14 @@ Every component, page, and API call that is event-scoped must have access to an 
 
 ```typescript
 interface EventContext {
-  eventId: string;
-  eventName: string;
-  resolvedRole: "creator" | "admin" | "buyer";
-  permissions: PermissionSet; // derived from resolvedRole, see Section 3
+  event: Readonly<EventData>;
+  resolvedRole: "creator" | "admin";
+  adminRoles: string[];
+  loading: boolean;
 }
 ```
+
+See `src/composables/useEventContext.ts` for the actual implementation. This context is provided via `provide(EVENT_CONTEXT_KEY, ...)` in the EventManageLayout and consumed via `inject(EVENT_CONTEXT_KEY)` in child tabs.
 
 Do not derive the role inline in individual components. Resolve it once at the event context level and consume it everywhere.
 
@@ -174,7 +170,7 @@ An Admin for Event B has **zero permissions** on Event A, Event C, or any other 
 - API: `POST /events/:id/admins` must validate `invitee_id !== event.creator_id` → return `400 SELF_ACTION_NOT_ALLOWED`
 
 **Creator inviting someone who is already an Admin for that event**
-- Check `admin_roles` for `(event_id, invitee_id, is_active = true)` before sending invite
+- Check `event_roles` for `(event_id, invitee_id, status = 'accepted')` before sending invite
 - UI: inline error `"This person is already an Admin for this event."`
 
 **Buyer requesting tickets they already own for the same tier**
@@ -249,12 +245,12 @@ An Admin for Event B has **zero permissions** on Event A, Event C, or any other 
 ### 4.6 Admin Scope Guards
 
 **Admin can only see data for events they are explicitly invited to**
-- Every Admin API call must verify a valid `admin_roles` row for `(user_id, event_id)` with `is_active = true`
-- Never derive `event_id` trust from request body alone — always cross-check against the `admin_roles` table
+- Every Admin API call must verify a valid `event_roles` row for `(user_id, event_id)` with `status = 'accepted'`
+- Never derive `event_id` trust from request body alone — always cross-check against the `event_roles` table
 - Return `403 FORBIDDEN` (not `404`) if Admin tries to access data for an event they are not invited to
 
 **Invitation expiry**
-- Admin invitations not accepted within 72 hours auto-expire (`is_active = false`)
+- Admin invitations not accepted within 72 hours auto-expire (`status = 'cancelled'`)
 - Expired invitations show in Admin Management as "Expired" with a "Resend Invite" option
 
 ---
@@ -284,9 +280,9 @@ Show a toast or inline confirmation after every successful action. Never silentl
 ### 5.2 Role-Aware UI Rules
 
 **The panel must visually reflect the current event role**
-- Creator Panel: violet (`--color-primary`) accent, full nav (Events, Chat, Attendees, Analytics, Admins, Design, Settings)
-- Admin Panel: teal (`--color-teal`) accent, scoped nav (Chat, Attendees, Scanner) — no Analytics, no Settings, no Admin Management
-- Role badge in panel header: always visible, always accurate to the current event
+- Both Creator and Admin see the full tab set in the sidebar. Creator-only tabs (Settings, Admin Management, Analytics) appear behind a `border-t` divider.
+- The role badge in the sidebar header shows "Creator" (violet `#6C63FF`) or "Admin" (teal `#43C6AC`).
+- See `src/components/layout/EventManageLayout.vue` for the actual nav item split.
 
 **Switching between events a user manages**
 - Provide an event switcher dropdown in the panel header showing all events the user is Creator or Admin of
@@ -297,22 +293,7 @@ Show a toast or inline confirmation after every successful action. Never silentl
 - Do not disable buttons with a tooltip explanation for role restrictions. Remove them entirely.
 - Exception: genuinely discoverable upgrade paths (e.g. a grayed "Analytics" in Admin Panel with tooltip "Only available to the Creator") are acceptable if they serve onboarding/discovery purposes.
 
-### 5.3 Button & CTA Rules
-
-- Async buttons: show loading spinner + disable during in-flight request. Prevent double-submission.
-- Destructive buttons use `--color-error` styling, never primary violet.
-- One primary CTA per screen. Multiple actions must have clear visual hierarchy.
-- Confirm Payment button: only render if `ticket_request.status` is `pending`. Never for `owned`.
-
-### 5.4 Form Rules
-
-- Validate on blur (when user leaves a field), not only on submit
-- Show character counts on fields with limits
-- Disable submit button until all required fields are valid
-- Normalize email inputs to lowercase before sending to API
-- After successful submission: reset form and redirect or show confirmation
-
-### 5.5 Status Badge Rules
+### 5.3 Status Badge Rules
 
 | Status      | Color   | Hex       |
 |-------------|---------|-----------|
@@ -324,30 +305,6 @@ Show a toast or inline confirmation after every successful action. Never silentl
 | Cancelled   | Red     | `#FF3B3B` |
 
 Always use badges — never plain text for status. Badges must be readable on white, lavender, and blush surfaces.
-
-### 5.6 Responsive Rules
-
-- All pages must work at 375px (mobile) and 1280px+ (desktop)
-- Sidebars collapse to bottom tab bar or hamburger on mobile
-- Tables become vertically stacked cards on mobile — never overflow silently
-- Chat: thread list and chat panel stack vertically on mobile (back-navigation pattern, not split view)
-- QR code on e-ticket: minimum 200×200px on mobile for reliable scanning
-
-### 5.7 Real-Time (Chat) UI Rules
-
-- Optimistically render sent messages immediately — do not wait for server confirmation
-- If server rejects: show bubble in error state with "Retry" option
-- Unread counts update via WebSocket — never require page refresh
-- Auto-scroll to latest message on open, and on new messages only if user is already at the bottom
-- Show typing indicator when the other party is composing
-- Closed threads (`is_active = false`): remove input bar, show status banner
-
-### 5.8 Ticket Design Editor Rules
-
-- Live preview updates within 300ms — use debounce on inputs
-- "Save Design" disabled if no changes since last save
-- Print preview (B&W) is a toggle only — does not alter the saved design
-- QR code in preview is always a placeholder — never a real ticket's QR
 
 ---
 
@@ -381,26 +338,6 @@ Always use badges — never plain text for status. Badges must be readable on wh
 | Buyer UI      | `--color-secondary` coral | `--color-primary` violet |
 
 The accent color must also apply to: active sidebar item highlight, panel header top border, primary button background, and role badge background.
-
-### 6.3 Typography
-
-```
-Display / Hero: Plus Jakarta Sans, 700, 48px
-H1:             Plus Jakarta Sans, 700, 32px
-H2:             Plus Jakarta Sans, 600, 24px
-H3:             Inter, 600, 18px
-Body:           Inter, 400, 16px
-Caption:        Inter, 400, 13px
-Button:         Inter, 600, 15px
-Mono (IDs/QR):  JetBrains Mono, 400, 13px
-```
-
-### 6.4 Spacing & Shape
-
-- Border radius: cards `12px`, buttons `8px`, badges `6px`, inputs `8px`
-- Card shadow: `0 4px 16px rgba(108, 99, 255, 0.10)`
-- Focus ring: `2px solid var(--color-primary)` with `2px offset`
-- Base spacing unit: `4px` — use multiples (8, 12, 16, 24, 32, 48, 64)
 
 ---
 
@@ -446,8 +383,7 @@ Every API endpoint must:
 
 - **Never trust the client for role.** Always resolve event-scoped role server-side from the database on every request.
 - **JWT claims are not authoritative for event roles.** A JWT may say a user exists — it says nothing about their role on any specific event. Always query.
-- **QR code payloads must be HMAC-signed.** Validate signature on every check-in. Reject any QR that fails signature check regardless of payload content.
-- **Admin scope isolation.** Every Admin query must be verified against `admin_roles`. An Admin cannot access data for events where they have no `admin_roles` row.
+- **Admin scope isolation.** Every Admin query must be verified against `event_roles`. An Admin cannot access data for events where they have no `event_roles` row.
 - **File uploads.** Validate MIME type server-side. Store with random keys in S3/R2. Never serve from API origin.
 - **Rate limiting.** Auth endpoints: 5/min. Chat messages: 60/min per user. Ticket requests: 10/min per user.
 - **`NOT_FOUND` for forbidden resources.** Never reveal whether a resource exists but is forbidden — always return `404` for things the user should not know about.
@@ -458,13 +394,13 @@ Every API endpoint must:
 
 | Mistake | Correct behavior |
 |---|---|
-| Treating role as a global account property | Role is per-event. Resolve it from `events.creator_id` and `admin_roles` every time. |
+| Treating role as a global account property | Role is per-event. Resolve it from `events.creator_id` and `event_roles` every time. |
 | Not re-resolving role when user switches events | Re-resolve and re-render the entire panel context on every event navigation. |
 | Showing Creator Panel to a user who is Admin on that event | Check `resolvedRole` for the active event, not the user's "default" role. |
 | Showing "Request Ticket" to the event Creator | Remove the button. Creator cannot buy their own ticket. |
 | Showing "Request Ticket" to an Admin of that event | Remove the button. Admin cannot buy tickets for events they manage. |
 | Allowing Creator to invite themselves as Admin | Validate `invitee_id !== event.creator_id` on client and server. |
-| Allowing Admin to access another event by guessing its ID | Every Admin API call verifies `admin_roles` row for the exact `(user_id, event_id)` pair. |
+| Allowing Admin to access another event by guessing its ID | Every Admin API call verifies `event_roles` row for the exact `(user_id, event_id)` pair. |
 | Deep-link to Creator Panel renders for an Admin | Detect role mismatch and redirect to the correct panel. |
 | Incrementing `sold_count` on Requested, not Owned | Only increment when status → `Owned`. |
 | Not using a DB row lock during ticket availability check | Use transaction + row-level lock to prevent overselling under concurrent load. |
@@ -479,28 +415,72 @@ Every API endpoint must:
 
 ---
 
-## 10. TASK CHECKLIST
+## 10. REPOSITORY ARCHITECTURE
 
-Before marking any feature as complete, verify:
+### 10.1 Commands
 
-- [ ] Event-scoped role is resolved correctly for the active event (Section 2)
-- [ ] UI reflects the correct panel and accent color for the resolved role
-- [ ] If the feature involves navigation between events, role re-resolution is triggered
-- [ ] Business logic guards from Section 4 are implemented
-- [ ] Self-action guards (Section 4.1) are checked for any creator/admin/buyer interaction
-- [ ] Role-switch guards (Section 4.2) are checked if routing or panel rendering is involved
-- [ ] Empty state is designed and implemented
-- [ ] Loading state is implemented for all async operations
-- [ ] Error state maps codes to human-friendly messages
-- [ ] Destructive actions have a confirmation dialog
-- [ ] Success actions show toast/confirmation
-- [ ] Permissions enforced on both client (UI visibility) and server (API auth)
-- [ ] Mobile layout works at 375px
-- [ ] Design tokens from Section 6 are used — no hardcoded hex values elsewhere
-- [ ] Forms validate on blur, disable submit until valid
-- [ ] No double-submission possible on any button
+| Command | What it does |
+|---------|-------------|
+| `npm run dev` | Starts frontend (Vite) + backend (Node `--watch`) concurrently via `concurrently` |
+| `npm run build` | `vue-tsc --noEmit && vite build` — typecheck then build |
+| `npm run typecheck` | `vue-tsc --noEmit` — TypeScript check only |
+
+### 10.2 Stack
+
+- **Frontend**: Vue 3 (`<script setup lang="ts">`) + Vite + Tailwind CSS v4 (`@import "tailwindcss"`, `@theme` directive in `src/style.css`) + vue-router + Supabase anon key client
+- **Backend**: Express.js (all routes use `await import()` dynamic imports) + Supabase admin client (service_role key) + Socket.IO + node-cron + Cloudinary (uploads)
+- **Real-time**: Socket.IO with room pattern `event:{eventId}:queue`, `event:{eventId}:attendance`, and per-thread chat rooms
+- **Dark mode**: `.dark` class toggled on `<html>`. Inline `<script>` in `index.html` reads `creaticks-theme` localStorage key before first paint to prevent FOUC. `useDarkMode` composable handles toggling.
+- **CSS tokens**: Defined via `@theme` in `src/style.css`. Never use hardcoded hex values; use classes like `bg-surface`, `text-text-heading`, `border-border/50`. Exception: Event Manage sidebar intentionally hardcoded `#1A1A2E`.
+
+### 10.3 Router Behavior
+
+- Guard in `src/router/index.ts` `beforeEach` checks: auth → email verified → role-picker → redirect landing auth'd users.
+- **No admin route guard.** All admin/manage pages self-authorize via API calls. The `requiresAdmin` meta was removed.
+- `isActive` uses **exact match** (`route.path === path`), not `startsWith` — prevents dual-highlight on shared-prefix routes.
+- Event Manage routes at `/events/:eventId/manage/*` use a separate layout (`EventManageLayout.vue`), completely independent of AppLayout (no Sidebar/BottomNav).
+
+### 10.4 Event-Scoped Roles (Actual Implementation)
+
+| File | Role |
+|------|------|
+| `src/composables/useEventContext.ts` | Fetches event by ID via `GET /api/events/:id`. Resolves `creator` if `event.creator_id === user.id`, `admin` if API returns `adminRole` array. Calls `provide(EVENT_CONTEXT_KEY)` directly in setup. |
+| `src/composables/useAdminEvents.ts` | Fetches `GET /api/events` + `GET /api/events/admin` in parallel, deduplicates by ID, tags with `userRole`. **Module-level fetch caching** — `fetched` boolean flag prevents duplicate API calls. `fetchMyEvents()` returns a cached promise if already in-flight. |
+| `GET /api/events/:id` (backend) | Returns `{ event, adminRole?: string[] }`. Checks `event_roles` table for admin status. Creator is identified by `event.creator_id`. |
+| `GET /api/events/admin` (backend) | Queries `event_roles` for the user's accepted roles, returns matching events. |
+
+### 10.5 Backend Quirks
+
+- **ESM dotenv hoisting**: `backend/lib/supabase.js` calls `dotenv.config()` directly before `createClient()`. Without this, importing supabase before server.js runs `dotenv.config()` would leave env vars undefined.
+- **Dynamic imports**: All Express imports (routes, middleware) use `await import()` inside an `async main()` in `server.js`.
+- **Socket.IO rooms**: Frontend emits `join:room` / `leave:room` events. Standard rooms: `event:{eventId}:queue`, `event:{eventId}:attendance`, `ticket:{ticketRequestId}`.
+- **Cron jobs** (runs every 2 minutes via `node-cron`): auto-release claimed queue items after 15 min inactivity, auto-cancel unpaid tickets after payment deadline.
+- **AUDIT.md** documents known security issues: IDOR on `GET /api/invitations?user_id=`, `GET /api/events/:id` (no auth for published events), leaked internal errors, rate limit bypass (`trust proxy` missing), user enumeration via invitation search.
+
+### 10.6 Frontend Quirks
+
+- **Camera scanner**: `await nextTick()` is **required** after setting `cameraActive.value = true` before accessing `videoRef.value`, because `<video>` lives inside `v-if="cameraActive"` and doesn't exist in DOM until Vue re-renders. See `EventManageScan.vue` and `QRScanner.vue`.
+- **`useAdminEvents` caching**: Module-level `fetched` boolean and `fetchPromise` variable mean the composable only calls the API once per session. Call `resetMyEvents()` to re-fetch.
+- **Event Manage Layout separation**: `EventManageLayout.vue` is a standalone layout with dark navy sidebar (`#1A1A2E`, 220px). It does NOT include AppLayout, Sidebar, BottomNav, or TopBar. Child tabs receive event context via `inject`.
+- **`useEventContextLoader`** calls `provide(EVENT_CONTEXT_KEY, context)` inside the composable itself (not via a template `<provideEventContext>` component), avoiding a Vue bug where template function components don't trigger provide.
+
+### 10.7 Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/router/index.ts` | All routes + auth/nav guard |
+| `src/style.css` | Tailwind v4 `@theme` tokens, dark mode overrides |
+| `src/composables/useEventContext.ts` | Per-event role resolution, provide/inject pattern |
+| `src/composables/useAdminEvents.ts` | MyEvents list with caching |
+| `src/components/layout/EventManageLayout.vue` | Dark navy sidebar, tab nav, context provider |
+| `src/views/EventManage*.vue` | Overview, Queue, Chat, Scan, Attendance tabs |
+| `src/views/MyEvents.vue` | Unified event list → manage page |
+| `backend/server.js` | Express + Socket.IO + cron entrypoint |
+| `backend/lib/supabase.js` | Supabase admin client (service_role), dotenv workaround |
+| `backend/routes/events.js` | Event CRUD + role resolution endpoint |
+| `backend/routes/tickets.js` | Ticket request lifecycle (905 lines) |
+| `docs/AUDIT.md` | Security audit findings |
 
 ---
 
-*Last updated: 2026 — Creatick v2.0*
 *This file supersedes any conflicting inline comments or previous prompt instructions.*

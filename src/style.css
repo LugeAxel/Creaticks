@@ -16,12 +16,13 @@
   --color-black: #1A1A2E;
   --color-body: #4A4A6A;
   --color-muted: #9B9BBD;
-  --color-surface: #F4F3FF;
-  --color-surface-b: #FFF5F7;
-  --color-surface-card: #FFFFFF;
-  --color-surface-variant: #E8E4F0;
-  --color-surface-dim: #E0DCF0;
-  --color-border: #E0DFFE;
+  --color-surface: #F5F0EB;
+  --color-surface-b: #FDF8F2;
+  --color-surface-card: #FEFCF7;
+  --color-surface-container-lowest: #FFFFFF;
+  --color-surface-variant: #E8E3DE;
+  --color-surface-dim: #E0DBD6;
+  --color-border: #E8E2DA;
   --color-white: #FFFFFF;
   --color-error: #FF3B3B;
   --color-success: #43C6AC;
@@ -42,9 +43,9 @@
   --color-success-container: #E0F7F0;
   --color-warning-container: #FFF0E0;
   --color-inverse-surface: #2A2A3E;
-  --color-inverse-on-surface: #F4F3FF;
-  --color-outline: #C8C4E0;
-  --color-outline-variant: #E0DFFE;
+  --color-inverse-on-surface: #F5F0EB;
+  --color-outline: #D0C8BE;
+  --color-outline-variant: #E8E2DA;
   --font-heading: 'Plus Jakarta Sans', sans-serif;
   --font-body: 'Inter', sans-serif;
   --radius-sm: 0.5rem;
@@ -63,6 +64,29 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   color: var(--color-text-heading);
@@ -79,32 +103,33 @@ h1, h2, h3, h4, h5, h6 {
   --color-secondary: #FF85A0;
   --color-teal: #3AB59C;
   --color-amber: #FFB347;
-  --color-black: #E8E4F0;
-  --color-body: #C8C4E0;
-  --color-muted: #9B9BBD;
-  --color-surface: #1A1A2E;
-  --color-surface-b: #222240;
-  --color-surface-card: #222240;
-  --color-surface-variant: #2E2E4E;
-  --color-surface-dim: #16162A;
-  --color-border: #3A3A5E;
+  --color-black: #E8E8ED;
+  --color-body: #C0C2CD;
+  --color-muted: #90929E;
+  --color-surface: #111318;
+  --color-surface-b: #191B21;
+  --color-surface-card: #1A1D23;
+  --color-surface-container-lowest: #0D0F13;
+  --color-surface-variant: #252830;
+  --color-surface-dim: #0D0F13;
+  --color-border: #2E3138;
   --color-error: #FF6B6B;
   --color-success: #3AB59C;
   --color-warning: #FFB347;
   --color-info: #7C72F0;
-  --color-text-heading: #E8E4F0;
-  --color-text: #C8C4E0;
-  --color-text-muted: #9B9BBD;
-  --color-on-primary: #1A1A2E;
-  --color-on-surface: #E8E4F0;
-  --color-on-surface-variant: #C8C4E0;
-  --color-primary-container: #3A3A6E;
+  --color-text-heading: #E8E8ED;
+  --color-text: #C0C2CD;
+  --color-text-muted: #90929E;
+  --color-on-primary: #111318;
+  --color-on-surface: #E8E8ED;
+  --color-on-surface-variant: #C0C2CD;
+  --color-primary-container: #2D2A50;
   --color-primary-fixed: #7C72F0;
-  --color-error-container: #4A2A2A;
-  --color-success-container: #2A4A3E;
-  --color-warning-container: #4A3A2A;
-  --color-inverse-surface: #F4F3FF;
-  --color-inverse-on-surface: #1A1A2E;
-  --color-outline: #5E5E7E;
-  --color-outline-variant: #3A3A5E;
+  --color-error-container: #3D2025;
+  --color-success-container: #1D3628;
+  --color-warning-container: #3D2E15;
+  --color-inverse-surface: #E8E8ED;
+  --color-inverse-on-surface: #1A1D23;
+  --color-outline: #3A3D45;
+  --color-outline-variant: #2E3138;
 }

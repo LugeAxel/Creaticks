@@ -35,7 +35,7 @@ router.post('/search', requireAuth, async (req, res) => {
   try {
     const { data: profiles, error } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, name, avatar_url')
+      .select('id, name, avatar_url')
       .or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
       .neq('id', req.user.id)
       .limit(20)
@@ -55,6 +55,7 @@ router.post('/search', requireAuth, async (req, res) => {
       results: profiles.length
     })
 
+    // Return only non-sensitive profile fields to reduce enumeration risk
     res.json({ users: profiles })
   } catch (err) {
     logger.error('INVITATION-SEARCH', 'Search failed', {
@@ -93,7 +94,7 @@ router.get('/', requireAuth, async (req, res) => {
     try {
       const { data: user } = await supabaseAdmin.auth.admin.getUserById(uid)
       if (user?.user) {
-        invitedByMap[uid] = { id: user.user.id, email: user.user.email || '' }
+        invitedByMap[uid] = { id: user.user.id, name: user.user.user_metadata?.name || '', avatar_url: user.user.user_metadata?.avatar_url || '' }
       }
     } catch {
       invitedByMap[uid] = { id: uid, email: '' }
@@ -349,7 +350,6 @@ router.get('/event/:eventId', requireAuth, async (req, res) => {
     if (user?.user) {
       userMap[uid] = {
         id: user.user.id,
-        email: user.user.email || '',
         name: user.user.user_metadata?.name || '',
         avatar_url: user.user.user_metadata?.avatar_url || ''
       }

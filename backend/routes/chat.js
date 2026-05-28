@@ -44,7 +44,6 @@ router.get('/event/:eventId', requireAuth, async (req, res) => {
     .from('chat_threads')
     .select(`
       *,
-      buyer:buyer_id (id, email, user_metadata->name),
       ticket_request:ticket_request_id (tier_name, status)
     `)
     .eq('event_id', eventId)
@@ -59,7 +58,82 @@ router.get('/event/:eventId', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal mengambil chat' })
   }
 
-  const enriched = await Promise.all(threads.map(async (t) => {
+  const buyerIds = [...new Set((threads || []).map((t) => t.buyer_id).filter(Boolean))]
+  const buyerProfiles = {}
+
+  await Promise.all(buyerIds.map(async (buyerId) => {
+    try {
+      const { data: user } = await supabaseAdmin.auth.admin.getUserById(buyerId)
+      if (user?.user) {
+        buyerProfiles[buyerId] = {
+          name: user.user.user_metadata?.name || user.user.email?.split('@')[0] || 'Unknown',
+          email: user.user.email || ''
+        }
+      }
+    } catch {
+      buyerProfiles[buyerId] = { name: 'Unknown', email: '' }
+    }
+  }))
+
+  const enriched = await Promise.all((threads || []).map(async (t) => {
+    const { data: lastMsg } = await supabaseAdmin
+      .from('chat_messages')
+      .select('content, created_at, sender_id')
+      .eq('thread_id', t.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const { count } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('thread_id', t.id)
+      .neq('sender_id', req.user.id)
+
+    const buyerProfile = buyerProfiles[t.buyer_id] || { name: 'Unknown', email: '' }
+
+    return {
+      ...t,
+      last_message: lastMsg || null,
+      unread_count: count || 0,
+      buyer_name: buyerProfile.name,
+      ticket_tier: t.ticket_request?.tier_name || 'Regular',
+      ticket_status: t.ticket_request?.status || 'pending'
+    }
+  }))
+
+  res.json({ threads: enriched })
+})
+
+router.get('/me', requireAuth, async (req, res) => {
+  const { eventId } = req.query
+
+  let query = supabaseAdmin
+    .from('chat_threads')
+    .select(`
+      *,
+      ticket_request:ticket_request_id (tier_name, status),
+      events!inner(title, date, banner_url)
+    `)
+    .eq('buyer_id', req.user.id)
+    .order('updated_at', { ascending: false })
+
+  if (eventId) {
+    query = query.eq('event_id', eventId)
+  }
+
+  const { data: threads, error } = await query
+
+  if (error) {
+    logger.error('CHAT-ME', 'Failed to fetch buyer threads', {
+      requestId: req.requestId,
+      userId: req.user.id,
+      error: error.message
+    })
+    return res.status(500).json({ error: 'Gagal mengambil chat' })
+  }
+
+  const enriched = await Promise.all((threads || []).map(async (t) => {
     const { data: lastMsg } = await supabaseAdmin
       .from('chat_messages')
       .select('content, created_at, sender_id')
@@ -76,11 +150,11 @@ router.get('/event/:eventId', requireAuth, async (req, res) => {
 
     return {
       ...t,
-      last_message: lastMsg || null,
-      unread_count: count || 0,
-      buyer_name: t.buyer?.user_metadata?.name || t.buyer?.email || 'Unknown',
+      event_name: t.events?.title || 'Acara',
       ticket_tier: t.ticket_request?.tier_name || 'Regular',
-      ticket_status: t.ticket_request?.status || 'pending'
+      ticket_status: t.ticket_request?.status || 'pending',
+      last_message: lastMsg || null,
+      unread_count: count || 0
     }
   }))
 

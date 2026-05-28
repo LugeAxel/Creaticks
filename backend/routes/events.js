@@ -9,7 +9,7 @@ const VALID_CATEGORIES = ['Teknologi', 'Musik', 'Seni', 'Workshop', 'Olahraga', 
 
 const EVENT_SELECT = `
   *,
-  ticket_tiers(id, name, price, quota, description)
+  ticket_tiers(id, name, price, quota, description, color)
 `
 
 router.get('/', requireAuth, async (req, res) => {
@@ -177,7 +177,8 @@ router.post('/', requireAuth, async (req, res) => {
       name: t.name || 'Regular',
       price: t.price || 0,
       quota: t.limit || t.quota || 0,
-      description: t.description || ''
+      description: t.description || '',
+      color: t.color || '#6C63FF'
     }))
 
     const { error: tierError } = await supabaseAdmin
@@ -259,6 +260,7 @@ router.put('/:id', requireAuth, async (req, res) => {
   if (visibility !== undefined) updates.visibility = visibility
   if (status !== undefined) updates.status = status
   if (gallery_urls !== undefined) updates.gallery_urls = gallery_urls
+  if (req.body.seat_map !== undefined) updates.seat_map = req.body.seat_map
   updates.updated_at = new Date().toISOString()
 
   const { data: event, error } = await supabaseAdmin
@@ -297,7 +299,8 @@ router.put('/:id', requireAuth, async (req, res) => {
         name: t.name || 'Regular',
         price: t.price || 0,
         quota: t.limit || t.quota || 0,
-        description: t.description || ''
+        description: t.description || '',
+        color: t.color || '#6C63FF'
       }))
 
       const { error: insertError } = await supabaseAdmin

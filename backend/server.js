@@ -18,7 +18,7 @@ const main = async () => {
     import('./logger.js')
   ])
 
-  const [{ default: authRoutes }, { default: uploadRoutes }, { default: roleRoutes }, { default: invitationRoutes }, { default: eventRoutes }, { default: ticketRoutes }, { default: notificationRoutes }, { default: chatRoutes }] = await Promise.all([
+  const [{ default: authRoutes }, { default: uploadRoutes }, { default: roleRoutes }, { default: invitationRoutes }, { default: eventRoutes }, { default: ticketRoutes }, { default: notificationRoutes }, { default: chatRoutes }, { default: ticketDesignRoutes }, { default: seatRoutes }] = await Promise.all([
     import('./routes/auth.js'),
     import('./routes/upload.js'),
     import('./routes/role.js'),
@@ -26,7 +26,9 @@ const main = async () => {
     import('./routes/events.js'),
     import('./routes/tickets.js'),
     import('./routes/notifications.js'),
-    import('./routes/chat.js')
+    import('./routes/chat.js'),
+    import('./routes/ticketDesigns.js'),
+    import('./routes/seats.js')
   ])
 
   const app = express()
@@ -74,10 +76,12 @@ const main = async () => {
   app.use('/api/tickets', ticketRoutes)
   app.use('/api/notifications', notificationRoutes)
   app.use('/api/chat', chatRoutes)
+  app.use('/api', seatRoutes)
+  app.use('/api/ticket-designs', ticketDesignRoutes)
 
+  const { internalError } = await import('./lib/errorHelper.js')
   app.use((err, _req, res, _next) => {
-    logger.error('SERVER', 'Unhandled error', { error: err.message, stack: err.stack })
-    res.status(500).json({ error: 'Internal server error' })
+    return internalError(logger, 'SERVER', _req, res, err, 'Internal server error')
   })
 
   process.on('unhandledRejection', (reason) => {
@@ -113,6 +117,41 @@ const main = async () => {
     socket.on('disconnect', () => {
       logger.debug('SOCKET', 'Client disconnected', { socketId: socket.id })
     })
+  })
+
+  // Seat lock cleanup — every 60 seconds: release expired reservations
+  cron.schedule('* * * * *', async () => {
+    const { data: expiredSeats, error: seatsError } = await supabaseAdmin
+      .from('venue_seats')
+      .select('id, event_id')
+      .eq('status', 'reserved')
+      .lt('reserved_until', new Date().toISOString())
+
+    if (seatsError) {
+      logger.error('CRON-SEATS', 'Failed to fetch expired seat locks', { error: seatsError.message })
+    } else if (expiredSeats && expiredSeats.length > 0) {
+      for (const seat of expiredSeats) {
+        const { error: releaseError } = await supabaseAdmin
+          .from('venue_seats')
+          .update({
+            status: 'available',
+            reserved_by: null,
+            reserved_until: null
+          })
+          .eq('id', seat.id)
+
+        if (releaseError) {
+          logger.error('CRON-SEATS', `Failed to release seat ${seat.id}`, { error: releaseError.message })
+        } else {
+          logger.info('CRON-SEATS', `Auto-released seat ${seat.id}`)
+          io.to(`event:${seat.event_id}:seats`).emit('SEAT_UPDATE', {
+            seatId: seat.id,
+            status: 'available',
+            reservedUntil: null
+          })
+        }
+      }
+    }
   })
 
   // Configure node-cron scheduler running every 2 minutes

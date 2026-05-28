@@ -10,7 +10,7 @@ import BaseInput from '@/components/shared/BaseInput.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 
 const router = useRouter()
-const { session, getAuthHeaders, resetPasswordForEmail } = useAuth()
+const { session, getAuthHeaders, resetPasswordForEmail, linkOAuthProvider } = useAuth()
 const { upload } = useCloudinary()
 const { showToast } = useToast()
 
@@ -94,6 +94,19 @@ const handleSignOut = async () => {
   await supabase.auth.signOut()
   router.push('/login')
 }
+
+const linkLoading = ref(false)
+
+const handleLinkGoogle = async () => {
+  linkLoading.value = true
+  const { error: linkError } = await linkOAuthProvider('google')
+  linkLoading.value = false
+  if (linkError) {
+    error.value = linkError.message
+  } else {
+    success.value = 'Akun Google berhasil ditautkan'
+  }
+}
 </script>
 
 <template>
@@ -134,6 +147,14 @@ const handleSignOut = async () => {
         <p class="text-sm text-text-muted mb-4">Kami akan kirim link reset kata sandi ke email kamu.</p>
         <BaseButton variant="outline" :loading="passwordLoading" fullWidth @click="handleChangePassword">
           {{ passwordSent ? 'Terkirim!' : 'Ubah Kata Sandi' }}
+        </BaseButton>
+      </div>
+
+      <div class="mt-8 pt-8 border-t border-border">
+        <h2 class="text-lg font-heading font-bold text-text-heading mb-4">Akun Tertaut</h2>
+        <p class="text-sm text-text-muted mb-4">Tautkan akun Google agar bisa login tanpa kata sandi.</p>
+        <BaseButton variant="outline" fullWidth :loading="linkLoading" @click="handleLinkGoogle">
+          {{ '' }}Hubungkan Google
         </BaseButton>
       </div>
 

@@ -140,13 +140,21 @@ export function useNotifications() {
     }
   }
 
+  let pollInterval: ReturnType<typeof setInterval> | null = null
+
   onMounted(async () => {
     await fetchNotifications()
     subscribeToRealtime()
+    // Fallback polling every 30s in case WebSocket fails
+    pollInterval = setInterval(fetchNotifications, 30000)
   })
 
   onUnmounted(() => {
     unsubscribeFromRealtime()
+    if (pollInterval) {
+      clearInterval(pollInterval)
+      pollInterval = null
+    }
   })
 
   return {

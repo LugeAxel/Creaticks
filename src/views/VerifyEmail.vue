@@ -10,6 +10,27 @@ const router = useRouter()
 const status = ref<'loading' | 'success' | 'error'>('loading')
 const errorMsg = ref('')
 
+const checkDuplicateEmail = async (session: import('@supabase/supabase-js').Session): Promise<boolean> => {
+  const email = session.user.email
+  const userId = session.user.id
+  if (!email) return false
+
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .neq('id', userId)
+    .maybeSingle()
+
+  if (existing) {
+    await supabase.auth.signOut()
+    status.value = 'error'
+    errorMsg.value = 'Email ini sudah terdaftar dengan metode login lain. Silakan gunakan kata sandi untuk masuk.'
+    return true
+  }
+  return false
+}
+
 onMounted(async () => {
   const hasHash = window.location.hash.includes('access_token')
   const code = route.query.code as string
@@ -28,6 +49,8 @@ onMounted(async () => {
           role: role || null,
           email: session.user.email
         })
+        const isDuplicate = await checkDuplicateEmail(session)
+        if (isDuplicate) return
         status.value = 'success'
         setTimeout(() => {
           const target = role ? '/' : 'role-picker'
@@ -67,6 +90,11 @@ onMounted(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     const role = user?.user_metadata?.role
     console.log('[VerifyEmail]', 'User after exchange', { userId: user?.id, role: role || null })
+    const { data: { session: postSession } } = await supabase.auth.getSession()
+    if (postSession) {
+      const isDuplicate = await checkDuplicateEmail(postSession)
+      if (isDuplicate) return
+    }
     setTimeout(() => {
       const target = role ? '/' : 'role-picker'
       console.log('[VerifyEmail]', 'Redirecting to:', target)

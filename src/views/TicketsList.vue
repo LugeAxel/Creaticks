@@ -85,9 +85,14 @@ onUnmounted(() => {
 <template>
   <AppLayout title="Tiket Saya">
     <div class="px-4 md:px-6 py-6 max-w-3xl mx-auto">
-      <div class="mb-6">
-        <h1 class="text-xl font-heading font-bold text-text-heading">Tiket Saya</h1>
-        <p class="text-sm text-text-muted mt-1">Semua tiket event kamu</p>
+      <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-heading font-bold text-text-heading">Tiket Saya</h1>
+          <p class="text-sm text-text-muted mt-1">Semua tiket event kamu</p>
+        </div>
+        <BaseButton variant="secondary" size="sm" @click="router.push({ name: 'buyer-chat' })">
+          Chat Penyelenggara
+        </BaseButton>
       </div>
 
       <div v-if="loading" class="flex items-center justify-center py-16">
@@ -106,28 +111,31 @@ onUnmounted(() => {
         <BaseButton variant="primary" @click="router.push('/acara')">Cari Acara</BaseButton>
       </div>
 
-      <div v-else class="space-y-4">
+      <div v-else class="space-y-5 md:space-y-6">
         <div
           v-for="ticket in tickets"
           :key="ticket.id"
-          class="bg-surface-card rounded-2xl border border-border/50 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+          class="relative cursor-pointer"
           @click="router.push(`/tickets/${ticket.id}`)"
         >
-          <div class="flex items-center p-4 gap-4">
-            <div class="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <span class="material-symbols-outlined text-2xl text-primary">confirmation_number</span>
+          <div class="absolute inset-0 translate-x-1 translate-y-1 bg-primary/15 rounded-2xl" />
+          <div class="relative bg-surface-card rounded-2xl border border-border/50 border-l-4 border-l-primary overflow-hidden transition-transform duration-300 hover:-translate-x-0.5 hover:-translate-y-0.5">
+            <div class="flex items-center p-4 md:p-5 gap-4 md:gap-5">
+              <div class="w-14 h-14 md:w-16 md:h-16 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl md:text-3xl text-primary">confirmation_number</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="font-heading font-bold text-text-heading text-sm md:text-base truncate">{{ ticket.event_name }}</h3>
+                <p class="text-xs md:text-sm text-text-muted mt-0.5">{{ formatDate(ticket.event_date) }} {{ formatTime(ticket.event_date) }}</p>
+                <p class="text-xs md:text-sm text-text-muted">{{ ticket.tier_name }}</p>
+              </div>
+              <span
+                class="shrink-0 text-[10px] md:text-xs font-semibold px-2.5 py-1 rounded-full"
+                :class="ticket.status === 'confirmed' ? 'bg-success/10 text-success' : ticket.status === 'pending' ? 'bg-warning/10 text-warning' : 'bg-error/10 text-error'"
+              >
+                {{ ticket.status === 'confirmed' ? 'Aktif' : ticket.status === 'pending' ? 'Menunggu' : 'Batal' }}
+              </span>
             </div>
-            <div class="flex-1 min-w-0">
-              <h3 class="font-heading font-bold text-text-heading text-sm truncate">{{ ticket.event_name }}</h3>
-              <p class="text-xs text-text-muted mt-0.5">{{ formatDate(ticket.event_date) }} {{ formatTime(ticket.event_date) }}</p>
-              <p class="text-xs text-text-muted">{{ ticket.tier_name }}</p>
-            </div>
-            <span
-              class="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full"
-              :class="ticket.status === 'confirmed' ? 'bg-success/10 text-success' : ticket.status === 'pending' ? 'bg-warning/10 text-warning' : 'bg-error/10 text-error'"
-            >
-              {{ ticket.status === 'confirmed' ? 'Aktif' : ticket.status === 'pending' ? 'Menunggu' : 'Batal' }}
-            </span>
           </div>
         </div>
       </div>

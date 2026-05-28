@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { fetchWithRetry } from '@/lib/api'
+import { joinRoom, leaveRoom, onEvent, offEvent } from '@/lib/socket'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import { useEventContext } from '@/composables/useEventContext'
@@ -224,7 +226,7 @@ const isBuyer = (msg: Message) => {
 onMounted(async () => {
   const token = (await supabase.auth.getSession()).data.session?.access_token
   try {
-    const res = await fetch(`/api/chat/event/${eventId}`, {
+    const res = await fetchWithRetry(`/api/chat/event/${eventId}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     if (res.ok) {
@@ -236,6 +238,34 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+})
+
+onMounted(() => {
+  try {
+    joinRoom(`event:${eventId}:admins`)
+    onEvent('chat:new_thread', (payload: any) => {
+      // payload: { thread_id, ticket_request }
+      const t = payload.ticket_request
+      threads.value.unshift({
+        id: payload.thread_id,
+        buyer_id: t.user_id,
+        buyer_name: t.profiles?.name || 'Pembeli',
+        ticket_request_id: t.id,
+        ticket_tier: t.tier_name,
+        ticket_status: t.status,
+        last_message: null,
+        is_active: true,
+        unread_count: 1
+      })
+    })
+  } catch {}
+})
+
+onUnmounted(() => {
+  try {
+    offEvent('chat:new_thread')
+    leaveRoom(`event:${eventId}:admins`)
+  } catch {}
 })
 
 onUnmounted(() => {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 import { supabase } from '@/lib/supabase'
+import { getSocket, joinRoom, leaveRoom, onEvent, offEvent } from '@/lib/socket'
 import { useEventContext } from '@/composables/useEventContext'
 import BaseButton from '@/components/shared/BaseButton.vue'
 
@@ -79,10 +80,12 @@ const updateStatus = async (ticketId: string, status: string) => {
   if (res.ok) await fetchTickets()
 }
 
+import { fetchWithRetry } from '@/lib/api'
+
 const fetchTickets = async () => {
   const token = (await supabase.auth.getSession()).data.session?.access_token
   try {
-    const res = await fetch(`/api/tickets/event/${eventId}`, {
+    const res = await fetchWithRetry(`/api/tickets/event/${eventId}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     if (res.ok) {
@@ -104,6 +107,39 @@ const filters = [
 ]
 
 onMounted(fetchTickets)
+onMounted(() => {
+  fetchTickets()
+  try {
+    joinRoom(`event:${eventId}:queue`)
+    onEvent('queue:new', (payload: any) => {
+      tickets.value.unshift(payload)
+    })
+    onEvent('queue:claimed', (payload: any) => {
+      const idx = tickets.value.findIndex(t => t.id === payload.id)
+      if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], claimed_by: payload.claimed_by, claimed_by_profile: payload.claimed_by_profile }
+    })
+    onEvent('queue:released', (payload: any) => {
+      const idx = tickets.value.findIndex(t => t.id === payload.id)
+      if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], claimed_by: null, claimed_by_profile: null }
+    })
+    onEvent('queue:status_changed', (payload: any) => {
+      const idx = tickets.value.findIndex(t => t.id === payload.id)
+      if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], status: payload.status }
+    })
+  } catch (e) {
+    // ignore
+  }
+})
+
+onUnmounted(() => {
+  try {
+    offEvent('queue:new')
+    offEvent('queue:claimed')
+    offEvent('queue:released')
+    offEvent('queue:status_changed')
+    leaveRoom(`event:${eventId}:queue`)
+  } catch {}
+})
 </script>
 
 <template>

@@ -28,8 +28,12 @@ export function useAuth() {
 
   const getCurrentUser = () => user.value
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const signIn = async (email: string, password: string, options?: { captchaToken?: string }) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken: options?.captchaToken }
+    })
     return { error: error as AuthError | null }
   }
 
@@ -77,6 +81,11 @@ export function useAuth() {
     return { error: error as AuthError | null }
   }
 
+  const linkOAuthProvider = async (provider: 'google' | 'github') => {
+    const { error } = await supabase.auth.linkIdentity({ provider })
+    return { error: error as AuthError | null }
+  }
+
   return {
     user,
     session,
@@ -88,6 +97,7 @@ export function useAuth() {
     signUp,
     signOut,
     resetPasswordForEmail,
-    updatePassword
+    updatePassword,
+    linkOAuthProvider
   }
 }

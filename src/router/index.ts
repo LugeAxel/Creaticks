@@ -113,6 +113,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/chat',
+      name: 'buyer-chat',
+      component: () => import('@/views/BuyerChat.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/events/saya',
       name: 'my-events',
       component: () => import('@/views/MyEvents.vue'),
@@ -134,7 +140,7 @@ const router = createRouter({
         { path: 'chat', name: 'event-manage-chat', component: () => import('@/views/EventManageChat.vue') },
         { path: 'scan', name: 'event-manage-scan', component: () => import('@/views/EventManageScan.vue') },
         { path: 'attendance', name: 'event-manage-attendance', component: () => import('@/views/EventManageAttendance.vue') },
-        { path: 'design', name: 'event-manage-design', component: () => import('@/components/shared/PlaceholderTab.vue'), props: { title: 'Desain Tiket', icon: 'auto_awesome' } },
+        { path: 'design', name: 'event-manage-design', component: () => import('@/views/EventManageDesign.vue') },
         { path: 'settings', name: 'event-manage-settings', component: () => import('@/components/shared/PlaceholderTab.vue'), props: { title: 'Pengaturan Acara', icon: 'settings' } },
         { path: 'admins', name: 'event-manage-admins', component: () => import('@/components/shared/PlaceholderTab.vue'), props: { title: 'Manajemen Admin', icon: 'admin_panel_settings' } },
         { path: 'analytics', name: 'event-manage-analytics', component: () => import('@/components/shared/PlaceholderTab.vue'), props: { title: 'Analitik', icon: 'analytics' } }

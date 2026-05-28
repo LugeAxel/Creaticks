@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { logger } from '../logger.js'
+import { sanitizeDbError } from '../lib/errorHelper.js'
 import supabaseAdmin from '../lib/supabase.js'
 
 const router = Router()
@@ -19,12 +20,13 @@ export async function createNotification(userId, type, title, body = null, refer
       })
 
     if (error) {
+      const mapped = sanitizeDbError(error)
       logger.error('NOTIFICATION-CREATE', 'Failed to create notification', {
         userId,
         type,
         error: error.message
       })
-      return { error: error.message }
+      return { error: mapped ? mapped.message : 'Failed to create notification' }
     }
 
     return { error: null }

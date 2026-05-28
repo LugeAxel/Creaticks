@@ -5,9 +5,10 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BaseInput from '@/components/shared/BaseInput.vue'
+import HCaptcha from '@/components/shared/HCaptcha.vue'
 
 const router = useRouter()
-const { signInWithOAuth, resetPasswordForEmail } = useAuth()
+const { signIn, signInWithOAuth, resetPasswordForEmail } = useAuth()
 
 const email = ref('')
 const password = ref('')
@@ -19,24 +20,46 @@ const forgotEmail = ref('')
 const forgotLoading = ref(false)
 const forgotSent = ref(false)
 
+const hCaptchaSiteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY
+
+const captchaToken = ref('')
+const captchaRef = ref<InstanceType<typeof HCaptcha>>()
+
+const onCaptchaVerified = (token: string) => {
+  captchaToken.value = token
+}
+
+const onCaptchaExpired = () => {
+  captchaToken.value = ''
+}
+
 const handleLogin = async () => {
   error.value = ''
   loading.value = true
 
-  const { data, error: authError } = await supabase.auth.signInWithPassword({
-    email: email.value,
-    password: password.value
+  if (!captchaToken.value) {
+    error.value = 'Harap selesaikan verifikasi keamanan'
+    loading.value = false
+    return
+  }
+
+  const { error: signInError } = await signIn(email.value, password.value, {
+    captchaToken: captchaToken.value
   })
 
   loading.value = false
 
-  if (authError) {
-    error.value = authError.message
+  if (signInError) {
+    captchaRef.value?.reset()
+    captchaToken.value = ''
+    error.value = signInError.message
     return
   }
 
-  if (data.session) {
-    const verified = data.session.user?.email_confirmed_at != null
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (session) {
+    const verified = session.user?.email_confirmed_at != null
     if (!verified) {
       router.push({ name: 'email-verification', query: { email: email.value } })
     } else {
@@ -47,7 +70,10 @@ const handleLogin = async () => {
 
 const handleOAuth = async (provider: 'google' | 'github') => {
   error.value = ''
-  await signInWithOAuth(provider)
+  const { error: oauthError } = await signInWithOAuth(provider)
+  if (oauthError) {
+    error.value = oauthError.message
+  }
 }
 
 const handleForgotPassword = async () => {
@@ -133,6 +159,15 @@ const handleForgotPassword = async () => {
         </div>
 
         <p v-if="error" class="text-sm text-error text-center">{{ error }}</p>
+
+        <div class="flex justify-center">
+          <HCaptcha
+            ref="captchaRef"
+            :sitekey="hCaptchaSiteKey"
+            @verify="onCaptchaVerified"
+            @expired="onCaptchaExpired"
+          />
+        </div>
 
         <BaseButton type="submit" variant="primary" :loading="loading" fullWidth>
           Masuk

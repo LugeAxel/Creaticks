@@ -8,6 +8,8 @@ import { useToast } from '@/composables/useToast'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BackButton from '@/components/shared/BackButton.vue'
+import SeatEditor from '@/components/seats/SeatEditor.vue'
+import type { EditorSeat } from '@/components/seats/SeatEditor.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -38,15 +40,25 @@ const eventData = ref({
   status: 'draft'
 })
 
+const TIER_COLORS = ['#6C63FF','#FF6584','#43C6AC','#FFB347','#9B59B6','#3498DB','#E74C3C','#2ECC71']
+
 interface TicketTier {
   id: number
   name: string
   price: number
   limit: number
   description: string
+  color: string
 }
 
 const ticketTiers = ref<TicketTier[]>([])
+
+const useSeatMap = ref(false)
+const seatMapData = ref<{ gridX: number; gridY: number; seats: EditorSeat[] }>({
+  gridX: 25,
+  gridY: 20,
+  seats: []
+})
 
 interface InviteEntry {
   userId: string
@@ -159,8 +171,16 @@ onMounted(async () => {
         name: t.name || 'Regular',
         price: t.price || 0,
         limit: t.quota || 0,
-        description: t.description || ''
+        description: t.description || '',
+        color: t.color || TIER_COLORS[0]
       }))
+    }
+
+    if (ev.seat_map) {
+      useSeatMap.value = true
+      seatMapData.value = typeof ev.seat_map === 'string' ? JSON.parse(ev.seat_map) : ev.seat_map
+    } else {
+      useSeatMap.value = false
     }
   } catch {
     error.value = 'Gagal memuat data acara'
@@ -170,12 +190,15 @@ onMounted(async () => {
 })
 
 const addTier = () => {
+  const usedColors = new Set(ticketTiers.value.map(t => t.color))
+  const nextColor = TIER_COLORS.find(c => !usedColors.has(c)) || TIER_COLORS[ticketTiers.value.length % TIER_COLORS.length]
   ticketTiers.value.push({
     id: Date.now(),
     name: '',
     price: 0,
     limit: 0,
-    description: ''
+    description: '',
+    color: nextColor
   })
 }
 
@@ -220,7 +243,8 @@ const handleSaveDraft = async () => {
         status: 'draft',
         gallery_urls: galleryUrls.value,
         ticket_tiers: ticketTiers.value,
-        invited_admins: invitedAdmins.value
+        invited_admins: invitedAdmins.value,
+        seat_map: useSeatMap.value ? seatMapData.value : null
       })
     })
 
@@ -261,7 +285,8 @@ const handlePublish = async () => {
         status: 'published',
         gallery_urls: galleryUrls.value,
         ticket_tiers: ticketTiers.value,
-        invited_admins: invitedAdmins.value
+        invited_admins: invitedAdmins.value,
+        seat_map: useSeatMap.value ? seatMapData.value : null
       })
     })
 
@@ -535,6 +560,17 @@ const removeInvitedAdmin = (idx: number) => {
             >
               <span class="material-symbols-outlined text-lg">close</span>
             </button>
+            <div class="flex items-center gap-3 mb-3">
+              <div class="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-border flex-shrink-0" :style="{ borderColor: tier.color }">
+                <input
+                  v-model="tier.color"
+                  type="color"
+                  class="absolute inset-0 w-full h-full cursor-pointer opacity-0"
+                />
+                <div class="w-full h-full" :style="{ backgroundColor: tier.color || '#6C63FF' }"></div>
+              </div>
+              <span class="text-xs text-text-muted font-medium">{{ tier.name || 'Warna kursi' }}</span>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label class="text-xs font-semibold text-text mb-1 block">Nama Tiket</label>
@@ -576,6 +612,33 @@ const removeInvitedAdmin = (idx: number) => {
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="mt-6 bg-surface-card rounded-2xl border border-border/50 p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-heading font-bold text-text-heading">Denah Kursi</h2>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="useSeatMap" class="sr-only peer" />
+              <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+              <span class="ms-2 text-sm font-medium text-text-muted">Aktifkan</span>
+            </label>
+          </div>
+
+          <div v-if="!useSeatMap" class="text-center py-6">
+            <span class="material-symbols-outlined text-3xl text-text-muted mb-2">event_seat</span>
+            <p class="text-sm text-text-muted">Aktifkan untuk mengatur denah kursi. Jumlah kursi akan otomatis menyesuaikan kuota tiket.</p>
+          </div>
+
+          <template v-if="useSeatMap">
+            <SeatEditor
+              v-model="seatMapData"
+              :tiers="ticketTiers.map(t => ({ name: t.name, price: t.price, color: t.color }))"
+            />
+            <p class="text-xs text-text-muted mt-3">
+              Jumlah kursi akan otomatis menyelaraskan dengan kuota tiket saat disimpan.
+              Generator kursi akan membuat data kursi di database setelah acara dibuat.
+            </p>
+          </template>
         </div>
 
         <div class="flex justify-between">
