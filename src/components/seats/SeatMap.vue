@@ -18,6 +18,25 @@ export interface TierInfo {
   color: string
 }
 
+type SeatStatus = SeatData['status']
+
+interface StatusStyle {
+  bgAlpha: string
+  icon: string
+  borderColor?: string
+  cursor: string
+  stripe?: boolean
+  grayscale?: boolean
+  selected?: boolean
+}
+
+const STATUS_STYLES: Record<SeatStatus, StatusStyle> = {
+  available: { bgAlpha: '20', icon: '', cursor: 'pointer', selected: true },
+  reserved: { bgAlpha: '08', icon: 'lock', cursor: 'not-allowed', stripe: true },
+  owned: { bgAlpha: '04', icon: 'block', cursor: 'not-allowed', stripe: true, grayscale: true },
+  checked_in: { bgAlpha: '06', icon: 'verified', borderColor: '#22c55e', cursor: 'not-allowed', stripe: true }
+}
+
 const props = withDefaults(defineProps<{
   seats: SeatData[]
   gridX: number
@@ -26,10 +45,16 @@ const props = withDefaults(defineProps<{
   selectedSeatIds?: string[]
   readonly?: boolean
   cellSize?: number
+  filterTierId?: string
+  pendingSeatIds?: string[]
+  otherTierSelectedIds?: string[]
 }>(), {
   selectedSeatIds: () => [],
   readonly: false,
-  cellSize: 40
+  cellSize: 40,
+  filterTierId: undefined,
+  pendingSeatIds: () => [],
+  otherTierSelectedIds: () => []
 })
 
 const emit = defineEmits<{
@@ -45,34 +70,54 @@ const tierColorMap = computed(() => {
   return map
 })
 
-const seatStatusClass = (seat: SeatData) => {
-  if (seat.status === 'available') {
-    if (props.selectedSeatIds?.includes(seat.id)) {
-      return 'ring-2 ring-primary bg-primary text-white'
-    }
-    return 'cursor-pointer hover:brightness-110 transition-all'
+const isOtherTier = (seat: SeatData) =>
+  props.filterTierId && seat.tier_id !== props.filterTierId
+
+const seatClass = (seat: SeatData) => {
+  const cfg = STATUS_STYLES[seat.status]
+  const cls = [cfg.cursor]
+  if (cfg.stripe) cls.push('seat-stripe')
+  if (seat.status === 'owned') cls.push('seat-owned')
+  if (cfg.grayscale) cls.push('seat-grayscale')
+  if (seat.status === 'available' && props.selectedSeatIds?.includes(seat.id)) {
+    cls.push('ring-2 ring-primary bg-primary text-white')
+  } else if (seat.status === 'available' && !isOtherTier(seat)) {
+    cls.push('hover:brightness-110 transition-all')
   }
-  if (seat.status === 'reserved') return 'cursor-not-allowed seat-reserved'
-  if (seat.status === 'owned') return 'cursor-not-allowed seat-owned'
-  if (seat.status === 'checked_in') return 'cursor-not-allowed seat-checked-in'
-  return 'cursor-not-allowed'
+  if (seat.status === 'available' && isOtherTier(seat)) {
+    cls.push('cursor-not-allowed opacity-40 seat-grayscale pointer-events-none')
+  }
+  if (props.otherTierSelectedIds?.includes(seat.id)) {
+    cls.push('opacity-40 seat-grayscale pointer-events-none cursor-not-allowed ring-2 ring-primary/30 bg-primary/10')
+  }
+  if (props.pendingSeatIds?.includes(seat.id)) {
+    cls.push('animate-pulse cursor-wait opacity-60 pointer-events-none')
+  }
+  return cls
 }
 
 const seatStyle = (seat: SeatData) => {
   const color = tierColorMap.value[seat.tier_id || ''] || '#6C63FF'
-  if (seat.status === 'available') {
-    return { backgroundColor: color + '20', borderColor: color, color }
+  const cfg = STATUS_STYLES[seat.status]
+
+  if (seat.status === 'available' && props.selectedSeatIds?.includes(seat.id)) {
+    return {}
   }
-  if (seat.status === 'reserved') {
-    return { backgroundColor: color + '12', borderColor: color }
+
+  const style: Record<string, string> = {
+    backgroundColor: color + cfg.bgAlpha,
+    borderColor: cfg.borderColor || color
   }
   if (seat.status === 'owned') {
-    return { backgroundColor: color + '08', borderColor: '#9ca3af', color: '#6b7280' }
+    style.color = '#6b7280'
   }
   if (seat.status === 'checked_in') {
-    return { backgroundColor: color + '08', borderColor: '#22c55e', color: '#16a34a' }
+    style.color = '#16a34a'
   }
-  return {}
+  if (seat.status !== 'available') {
+    style.color = style.color || (cfg.borderColor || color)
+  }
+  return style
 }
 
 const rows = computed(() => {
@@ -87,6 +132,8 @@ const rows = computed(() => {
 const handleClick = (seat: SeatData) => {
   if (props.readonly) return
   if (seat.status !== 'available') return
+  if (isOtherTier(seat)) return
+  if (props.pendingSeatIds?.includes(seat.id)) return
   emit('select', seat.id)
 }
 
@@ -133,22 +180,20 @@ const stageCells = computed(() => {
         }"
         :class="[
           'rounded-lg border transition-all select-none flex flex-col items-center justify-center leading-tight overflow-hidden',
-          seatStatusClass(seat)
+          ...seatClass(seat)
         ]"
-        :title="`${seat.seat_code} - ${seat.status}`"
+        :title="seat.status === 'available' && isOtherTier(seat) ? 'Kursi ini milik tiket lain' : `${seat.seat_code} - ${seat.status}`"
         @click="handleClick(seat)"
       >
         <span class="font-bold" :class="seat.status === 'available' ? 'text-[9px]' : 'text-[7px]'">{{ seat.seat_code }}</span>
-        <span v-if="seat.status === 'reserved'" class="material-symbols-outlined text-[11px]">lock</span>
-        <span v-else-if="seat.status === 'owned'" class="material-symbols-outlined text-[11px]">check_circle</span>
-        <span v-else-if="seat.status === 'checked_in'" class="material-symbols-outlined text-[11px]">verified</span>
+        <span :class="{'mt-[-1px]': true}" class="material-symbols-outlined text-[11px]">{{ STATUS_STYLES[seat.status].icon || '' }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.seat-reserved {
+.seat-stripe {
   background-image: repeating-linear-gradient(
     45deg,
     transparent,
@@ -158,23 +203,17 @@ const stageCells = computed(() => {
   );
 }
 
-.seat-owned {
+.seat-owned.seat-stripe {
   background-image: repeating-linear-gradient(
     45deg,
     transparent,
     transparent 3px,
-    rgba(0,0,0,0.04) 3px,
-    rgba(0,0,0,0.04) 6px
+    rgba(0,0,0,0.1) 3px,
+    rgba(0,0,0,0.1) 6px
   );
 }
 
-.seat-checked-in {
-  background-image: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 3px,
-    rgba(34,197,94,0.08) 3px,
-    rgba(34,197,94,0.08) 6px
-  );
+.seat-grayscale {
+  filter: grayscale(0.5) contrast(0.8);
 }
 </style>

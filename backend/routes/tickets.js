@@ -94,7 +94,7 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     const unavailableSeats = seatCheck.filter(s =>
-      s.status !== 'reserved' || (s.reserved_by && !s.reserved_by.startsWith('session_'))
+      s.status !== 'available' && !(s.status === 'reserved' && s.reserved_by?.startsWith('session_'))
     )
 
     if (unavailableSeats.length > 0) {
@@ -167,7 +167,7 @@ router.post('/', requireAuth, async (req, res) => {
   const tierNames = [...new Set(items.map(i => i.tier_name))]
   const { data: tiers, error: tiersError } = await supabaseAdmin
     .from('ticket_tiers')
-    .select('*')
+    .select('*, seat_tier')
     .eq('event_id', event_id)
     .in('name', tierNames)
 
@@ -182,6 +182,56 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({
       error: `Tiket tidak ditemukan: ${invalidItems.map(i => i.tier_name).join(', ')}`
     })
+  }
+
+  // Validate seat_tier requirements: if any item's tier has seat_tier=true,
+  // seat_ids must be provided and count must match quantity
+  const seatTierItems = items.filter(i => tierMap[i.tier_name]?.seat_tier)
+  if (seatTierItems.length > 0) {
+    if (!seat_ids || !Array.isArray(seat_ids) || seat_ids.length === 0) {
+      return res.status(400).json({
+        error: 'Tiket kursi wajib memilih kursi',
+        code: 'SEAT_REQUIRED'
+      })
+    }
+
+    const expectedSeatCount = seatTierItems.reduce((sum, i) => sum + (i.quantity || 1), 0)
+    if (seat_ids.length !== expectedSeatCount) {
+      return res.status(400).json({
+        error: `Jumlah kursi (${seat_ids.length}) tidak sesuai dengan jumlah tiket (${expectedSeatCount})`,
+        code: 'SEAT_COUNT_MISMATCH'
+      })
+    }
+
+    // Validate per-tier seat ownership — query tier_id from DB directly
+    const { data: seatTierCheck } = await supabaseAdmin
+      .from('venue_seats')
+      .select('id, tier_id')
+      .in('id', seat_ids)
+
+    if (seatTierCheck) {
+      // Build expected tier_id for each seat based on item ordering
+      const tierIdSequence = []
+      for (const item of seatTierItems) {
+        const tier = tierMap[item.tier_name]
+        if (!tier) continue
+        for (let i = 0; i < (item.quantity || 1); i++) {
+          tierIdSequence.push(tier.id)
+        }
+      }
+
+      for (let i = 0; i < Math.min(seat_ids.length, tierIdSequence.length); i++) {
+        const sid = seat_ids[i]
+        const expectedTierId = tierIdSequence[i]
+        const seat = seatTierCheck.find(s => s.id === sid)
+        if (seat && seat.tier_id !== expectedTierId) {
+          return res.status(400).json({
+            error: `Kursi ${seat.seat_code || sid} bukan milik tipe tiket yang dipilih`,
+            code: 'SEAT_TIER_MISMATCH'
+          })
+        }
+      }
+    }
   }
 
   const created = []
@@ -232,34 +282,44 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
   }
 
-  // Link provided seat IDs to the created ticket requests
+  // Link seat IDs to the created ticket requests one-to-one
   if (seat_ids && Array.isArray(seat_ids) && seat_ids.length > 0 && created.length > 0) {
-    const firstTicketId = created[0].id
-    const { error: linkError } = await supabaseAdmin
-      .from('venue_seats')
-      .update({
+    const allTicketIds = created.map(r => r.id).filter(Boolean)
+    const ioSeats = req.app.get('io')
+    const pairs = []
+
+    for (let i = 0; i < Math.min(seat_ids.length, allTicketIds.length); i++) {
+      pairs.push({
+        id: seat_ids[i],
         status: 'reserved',
-        reserved_by: firstTicketId,
+        reserved_by: allTicketIds[i],
         reserved_until: new Date(Date.now() + 30 * 60 * 1000).toISOString()
       })
-      .in('id', seat_ids)
+    }
 
-    if (linkError) {
-      logger.error('TICKETS-CREATE', 'Failed to link seats', {
-        requestId: req.requestId,
-        seatIds: seat_ids,
-        error: linkError.message
-      })
-    } else {
-      const ioSeats = req.app.get('io')
-      if (ioSeats) {
-        for (const seatId of seat_ids) {
-          ioSeats.to(`event:${event_id}:seats`).emit('SEAT_UPDATE', {
-            seatId,
-            status: 'reserved',
-            reservedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-          })
-        }
+    // Batch update each seat individually (one-to-one mapping)
+    for (const pair of pairs) {
+      const { error: linkError } = await supabaseAdmin
+        .from('venue_seats')
+        .update({
+          status: pair.status,
+          reserved_by: pair.reserved_by,
+          reserved_until: pair.reserved_until
+        })
+        .eq('id', pair.id)
+
+      if (linkError) {
+        logger.error('TICKETS-CREATE', 'Failed to link seat', {
+          requestId: req.requestId,
+          seatId: pair.id,
+          error: linkError.message
+        })
+      } else if (ioSeats) {
+        ioSeats.to(`event:${event_id}:seats`).emit('SEAT_UPDATE', {
+          seatId: pair.id,
+          status: 'reserved',
+          reservedUntil: pair.reserved_until
+        })
       }
     }
   }
@@ -457,7 +517,7 @@ router.put('/:id/status', requireAuth, async (req, res) => {
         throw new Error('update_failed')
       }
 
-      // When confirming, increment sold_count in ticket_tiers
+      // When confirming, increment sold_count in ticket_tiers and mark seats as owned
       if (status === 'confirmed') {
         try {
           const { data: tier } = await supabaseAdmin
@@ -476,6 +536,35 @@ router.put('/:id/status', requireAuth, async (req, res) => {
           }
         } catch (e) {
           logger.error('TICKETS-STATUS', 'Failed to increment sold_count', { requestId: req.requestId, error: e?.message || String(e) })
+        }
+
+        // Update venue_seats from reserved to owned
+        try {
+          await supabaseAdmin
+            .from('venue_seats')
+            .update({ status: 'owned', reserved_until: null })
+            .eq('reserved_by', id)
+            .eq('status', 'reserved')
+
+          const io = req.app.get('io')
+          if (io) {
+            const { data: updatedSeats } = await supabaseAdmin
+              .from('venue_seats')
+              .select('id')
+              .eq('reserved_by', id)
+              .eq('status', 'owned')
+
+            if (updatedSeats) {
+              updatedSeats.forEach(s => {
+                io.to(`event:${ticket.event_id}:seats`).emit('SEAT_UPDATE', {
+                  seatId: s.id,
+                  status: 'owned'
+                })
+              })
+            }
+          }
+        } catch (e) {
+          logger.error('TICKETS-STATUS', 'Failed to update seat status', { requestId: req.requestId, error: e?.message || String(e) })
         }
       }
     })

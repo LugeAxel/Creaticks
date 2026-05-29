@@ -19,8 +19,8 @@ defineEmits<{
       :type="type || 'text'"
       :placeholder="placeholder"
       :value="modelValue"
-      class="w-full px-4 py-3 text-sm font-body border-2 rounded-xl bg-surface-card outline-none transition-all duration-200 placeholder:text-text-muted"
-      :class="error ? 'border-error focus:border-error' : 'border-border focus:border-primary'"
+      class="w-full px-4 py-3 text-sm font-body border-2 rounded-xl bg-surface-card outline-none transition-all duration-200 placeholder:text-text-muted focus:ring-2 focus:ring-primary/20"
+      :class="error ? 'border-error focus:border-error focus:ring-error/20' : 'border-border focus:border-primary'"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
     <p v-if="error" class="text-xs text-error mt-0.5">{{ error }}</p>

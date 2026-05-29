@@ -44,7 +44,7 @@ onMounted(async () => {
 
   await fetchChatUnread()
   // Poll for unread count every 30s
-  unreadInterval = setInterval(fetchChatUnread, 30000)
+  unreadInterval = setInterval(fetchChatUnread, 60000)
 })
 
 watch(user, (u) => {

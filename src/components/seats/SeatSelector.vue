@@ -10,8 +10,14 @@ const props = withDefaults(defineProps<{
   sessionId: string
   maxSeats?: number
   authToken: string
+  activeTierId?: string
+  initialSelectedIds?: string[]
+  allSelectedIds?: string[]
 }>(), {
-  maxSeats: 5
+  maxSeats: 5,
+  activeTierId: undefined,
+  initialSelectedIds: () => [],
+  allSelectedIds: () => []
 })
 
 const emit = defineEmits<{
@@ -21,6 +27,12 @@ const emit = defineEmits<{
 const selectedSeatIds = ref<string[]>([])
 const lockTimers = ref<Record<string, { expiresAt: string; interval: number }>>({})
 const error = ref('')
+const pendingSeatIds = ref<string[]>([])
+const isLocking = computed(() => pendingSeatIds.value.length > 0)
+
+const otherTierSelectedIds = computed(() =>
+  props.allSelectedIds.filter(id => !selectedSeatIds.value.includes(id))
+)
 
 const availableSeats = computed(() =>
   props.seats.filter(s => s.status === 'available')
@@ -35,8 +47,12 @@ const canSelectMore = computed(() =>
 async function toggleSeat(seatId: string) {
   error.value = ''
 
+  if (isLocking.value) return
+  if (pendingSeatIds.value.includes(seatId)) return
+
   const seat = props.seats.find(s => s.id === seatId)
   if (!seat || seat.status !== 'available') return
+  if (props.activeTierId && seat.tier_id !== props.activeTierId) return
 
   if (selectedSeatIds.value.includes(seatId)) {
     await releaseSeat(seatId)
@@ -52,6 +68,7 @@ async function toggleSeat(seatId: string) {
 }
 
 async function lockSeat(seatId: string) {
+  pendingSeatIds.value.push(seatId)
   try {
     const res = await fetch('/api/seat-locks', {
       method: 'POST',
@@ -95,10 +112,14 @@ async function lockSeat(seatId: string) {
     emit('change', selectedSeatIds.value)
   } catch {
     error.value = 'Gagal menghubungi server'
+  } finally {
+    pendingSeatIds.value = pendingSeatIds.value.filter(id => id !== seatId)
   }
 }
 
 async function releaseSeat(seatId: string) {
+  if (pendingSeatIds.value.includes(seatId)) return
+  pendingSeatIds.value.push(seatId)
   try {
     await fetch(`/api/seat-locks/${seatId}`, {
       method: 'DELETE',
@@ -110,6 +131,8 @@ async function releaseSeat(seatId: string) {
     })
   } catch {
     // best-effort release
+  } finally {
+    pendingSeatIds.value = pendingSeatIds.value.filter(id => id !== seatId)
   }
 
   selectedSeatIds.value = selectedSeatIds.value.filter(id => id !== seatId)
@@ -152,6 +175,28 @@ watch(lockTimers, () => {
   }
 }, { deep: true })
 
+watch(() => props.initialSelectedIds, (ids) => {
+  if (!ids || ids.length === 0) {
+    selectedSeatIds.value = []
+    emit('change', selectedSeatIds.value)
+    return
+  }
+  // Restore previously selected seats without API calls
+  const current = selectedSeatIds.value
+  const toAdd = ids.filter(id => !current.includes(id))
+  const toRemove = current.filter(id => !ids.includes(id))
+  if (toRemove.length > 0) {
+    toRemove.forEach(id => {
+      if (lockTimers.value[id]) {
+        clearTimeout(lockTimers.value[id].interval)
+        delete lockTimers.value[id]
+      }
+    })
+  }
+  selectedSeatIds.value = ids
+  emit('change', selectedSeatIds.value)
+}, { immediate: true })
+
 onUnmounted(() => {
   if (tickInterval) clearInterval(tickInterval)
   releaseAll()
@@ -164,6 +209,10 @@ defineExpose({ selectedSeatIds, releaseAll })
   <div>
     <div v-if="error" class="mb-3 p-3 rounded-xl bg-error/10 border border-error/20 text-sm text-error font-medium">
       {{ error }}
+    </div>
+    <div v-if="isLocking" class="mb-3 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm text-primary flex items-center gap-2">
+      <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
+      Memproses kursi...
     </div>
 
     <div class="flex items-center justify-between mb-4">
@@ -202,6 +251,9 @@ defineExpose({ selectedSeatIds, releaseAll })
         :gridY="gridY"
         :tiers="tiers"
         :selectedSeatIds="selectedSeatIds"
+        :filterTierId="activeTierId"
+        :pendingSeatIds="pendingSeatIds"
+        :otherTierSelectedIds="otherTierSelectedIds"
         @select="toggleSeat"
       />
     </div>

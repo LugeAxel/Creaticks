@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import AppLayout from '@/components/layout/AppLayout.vue'
+import BackButton from '@/components/shared/BackButton.vue'
+import BaseButton from '@/components/shared/BaseButton.vue'
+import BaseInput from '@/components/shared/BaseInput.vue'
+import { useToast } from '@/composables/useToast'
 import { useCloudinary } from '@/composables/useCloudinary'
 import { useTeamManagement } from '@/composables/useTeamManagement'
-import { useToast } from '@/composables/useToast'
-import AppLayout from '@/components/layout/AppLayout.vue'
-import BaseButton from '@/components/shared/BaseButton.vue'
-import BackButton from '@/components/shared/BackButton.vue'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import SeatEditor from '@/components/seats/SeatEditor.vue'
 import type { EditorSeat } from '@/components/seats/SeatEditor.vue'
 
@@ -37,6 +40,9 @@ const eventData = ref({
   date: '',
   time: '',
   location: '',
+  location_lat: null as number | null,
+  location_lng: null as number | null,
+  location_detail: '',
   status: 'draft'
 })
 
@@ -49,6 +55,7 @@ interface TicketTier {
   limit: number
   description: string
   color: string
+  seat_tier: boolean
 }
 
 const ticketTiers = ref<TicketTier[]>([])
@@ -91,8 +98,203 @@ const canContinue = computed(() => {
   return true
 })
 
+const paintedSeatCountPerTier = computed(() => {
+  const counts: Record<string, number> = {}
+  if (!useSeatMap.value) return counts
+  for (const seat of seatMapData.value.seats) {
+    if (seat.tier) {
+      counts[seat.tier] = (counts[seat.tier] || 0) + 1
+    }
+  }
+  return counts
+})
+
 const galleryUrls = ref<string[]>([])
 const galleryUploading = ref(false)
+
+// Leaflet map for location picker
+const mapContainer = ref<HTMLDivElement | null>(null)
+let mapInstance: L.Map | null = null
+let marker: L.Marker | null = null
+const mapError = ref('')
+
+const initMap = () => {
+  nextTick(() => {
+    if (!mapContainer.value) return
+    if (mapInstance) return
+
+    const defaultLat = eventData.value.location_lat ?? -6.2002
+    const defaultLng = eventData.value.location_lng ?? 106.8204
+
+    mapInstance = L.map(mapContainer.value, {
+      center: [defaultLat, defaultLng],
+      zoom: 13,
+      zoomControl: true
+    })
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(mapInstance)
+
+    if (eventData.value.location_lat && eventData.value.location_lng) {
+      marker = L.marker([eventData.value.location_lat, eventData.value.location_lng], { draggable: true }).addTo(mapInstance)
+      marker.on('dragend', onMarkerDrag)
+    }
+
+    mapInstance.on('click', (e: L.LeafletMouseEvent) => {
+      placeMarker(e.latlng.lat, e.latlng.lng)
+    })
+  })
+}
+
+const placeMarker = (lat: number, lng: number) => {
+  if (marker) {
+    marker.setLatLng([lat, lng])
+  } else {
+    marker = L.marker([lat, lng], { draggable: true }).addTo(mapInstance!)
+    marker.on('dragend', onMarkerDrag)
+  }
+  eventData.value.location_lat = lat
+  eventData.value.location_lng = lng
+  if (!eventData.value.location) {
+    reverseGeocode(lat, lng)
+  }
+}
+
+const onMarkerDrag = () => {
+  if (!marker) return
+  const pos = marker.getLatLng()
+  eventData.value.location_lat = pos.lat
+  eventData.value.location_lng = pos.lng
+}
+
+const reverseGeocode = async (lat: number, lng: number) => {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`)
+    if (res.ok) {
+      const data = await res.json()
+      const display = data.display_name?.split(',')[0] || ''
+      eventData.value.location = display
+    }
+  } catch {
+    // silent
+  }
+}
+
+const removeMap = () => {
+  mapInstance?.remove()
+  mapInstance = null
+  marker = null
+}
+
+// Location search via Nominatim
+const locSearchQuery = ref('')
+const locSearchResults = ref<any[]>([])
+const locSearching = ref(false)
+const locShowDropdown = ref(false)
+let locSearchTimer: ReturnType<typeof setTimeout> | null = null
+const locSearchContainer = ref<HTMLDivElement | null>(null)
+
+const searchLocation = async (q: string) => {
+  if (!q.trim()) { locSearchResults.value = []; return }
+  locSearching.value = true
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`)
+    if (res.ok) locSearchResults.value = await res.json()
+  } catch {
+    locSearchResults.value = []
+  } finally {
+    locSearching.value = false
+  }
+}
+
+const selectResult = (r: any) => {
+  const lat = parseFloat(r.lat)
+  const lng = parseFloat(r.lon)
+  eventData.value.location = r.display_name?.split(',')[0] || r.display_name || ''
+  eventData.value.location_lat = lat
+  eventData.value.location_lng = lng
+  locShowDropdown.value = false
+  locSearchQuery.value = eventData.value.location
+
+  removeMap()
+  nextTick(() => {
+    if (!mapContainer.value) return
+    mapInstance = L.map(mapContainer.value, {
+      center: [lat, lng],
+      zoom: 15,
+      zoomControl: true
+    })
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(mapInstance)
+    marker = L.marker([lat, lng], { draggable: true }).addTo(mapInstance)
+    marker.on('dragend', onMarkerDrag)
+    mapInstance.on('click', (e: L.LeafletMouseEvent) => {
+      placeMarker(e.latlng.lat, e.latlng.lng)
+    })
+  })
+}
+
+watch(locSearchQuery, (q) => {
+  if (locSearchTimer) clearTimeout(locSearchTimer)
+  if (!q.trim()) { locSearchResults.value = []; locShowDropdown.value = false; return }
+  locShowDropdown.value = true
+  locSearchTimer = setTimeout(() => searchLocation(q), 400)
+})
+
+// Coordinate paste input
+const coordInput = ref('')
+const coordError = ref('')
+const showCoordInput = ref(false)
+let coordTimer: ReturnType<typeof setTimeout> | null = null
+
+function parseCoordinates(input: string): { lat: number; lng: number } | null {
+  const cleaned = input.replace(/[°º]/g, '').trim()
+  const parts = cleaned.split(/[,;]\s*|\s+/).filter(Boolean)
+  if (parts.length < 2) return null
+  const lat = parseFloat(parts[0].replace(',', '.'))
+  const lng = parseFloat(parts[1].replace(',', '.'))
+  if (isNaN(lat) || isNaN(lng)) return null
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return { lat, lng }
+}
+
+function applyCoordInput(val: string) {
+  if (!val.trim()) { coordError.value = ''; return }
+  const coords = parseCoordinates(val)
+  if (!coords) {
+    coordError.value = 'Format: lintang, bujur (contoh: -7.7717, 110.3771)'
+    return
+  }
+  coordError.value = ''
+  eventData.value.location_lat = coords.lat
+  eventData.value.location_lng = coords.lng
+  if (!eventData.value.location) reverseGeocode(coords.lat, coords.lng)
+  removeMap()
+  nextTick(() => initMap())
+}
+
+watch(coordInput, (val) => {
+  if (coordTimer) clearTimeout(coordTimer)
+  coordTimer = setTimeout(() => applyCoordInput(val), 500)
+})
+
+watch(() => eventData.value.event_format, (fmt) => {
+  if (fmt === 'online') {
+    removeMap()
+  }
+})
+
+onMounted(() => {
+  document.addEventListener('click', (e: MouseEvent) => {
+    if (locSearchContainer.value && !locSearchContainer.value.contains(e.target as Node)) {
+      locShowDropdown.value = false
+    }
+  })
+})
 
 const handleBannerUpload = async (e: Event) => {
   const input = e.target as HTMLInputElement
@@ -162,6 +364,9 @@ onMounted(async () => {
       date: ev.date ? ev.date.slice(0, 10) : '',
       time: extractTime(ev.date),
       location: ev.location || '',
+      location_lat: ev.location_lat ?? null,
+      location_lng: ev.location_lng ?? null,
+      location_detail: ev.location_detail || '',
       status: ev.status || 'draft'
     }
     galleryUrls.value = ev.gallery_urls || []
@@ -172,7 +377,8 @@ onMounted(async () => {
         price: t.price || 0,
         limit: t.quota || 0,
         description: t.description || '',
-        color: t.color || TIER_COLORS[0]
+        color: t.color || TIER_COLORS[0],
+        seat_tier: t.seat_tier || false
       }))
     }
 
@@ -187,6 +393,10 @@ onMounted(async () => {
   } finally {
     loadingEvent.value = false
   }
+
+  if (eventData.value.event_format !== 'online') {
+    nextTick(() => initMap())
+  }
 })
 
 const addTier = () => {
@@ -198,7 +408,8 @@ const addTier = () => {
     price: 0,
     limit: 0,
     description: '',
-    color: nextColor
+    color: nextColor,
+    seat_tier: false
   })
 }
 
@@ -255,6 +466,25 @@ const handleSaveDraft = async () => {
       return
     }
 
+    const savedEvent = await res.json()
+    const eventId = savedEvent.event?.id || route.params.id
+
+    // Auto-generate seats if seat map is enabled
+    if (useSeatMap.value && seatMapData.value.seats.length > 0) {
+      try {
+        await fetch(`/api/events/${eventId}/seats/generate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(seatMapData.value)
+        })
+      } catch (e) {
+        // non-blocking — event saved, seat generation may be retried
+      }
+    }
+
     router.push({ name: 'creator-dashboard' })
   } catch {
     error.value = 'Gagal menyimpan acara'
@@ -295,6 +525,25 @@ const handlePublish = async () => {
       error.value = data.error || 'Gagal mempublikasi acara'
       saving.value = false
       return
+    }
+
+    const savedEvent = await res.json()
+    const eventId = savedEvent.event?.id || route.params.id
+
+    // Auto-generate seats if seat map is enabled
+    if (useSeatMap.value && seatMapData.value.seats.length > 0) {
+      try {
+        await fetch(`/api/events/${eventId}/seats/generate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(seatMapData.value)
+        })
+      } catch (e) {
+        // non-blocking — event published, seat generation may be retried
+      }
     }
 
     router.push({ name: 'creator-dashboard' })
@@ -505,16 +754,84 @@ const removeInvitedAdmin = (idx: number) => {
           </div>
         </div>
 
-        <div>
-          <label class="text-sm font-semibold text-text mb-1.5 block">Lokasi / Venue</label>
-          <div class="relative">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg">location_on</span>
+        <div v-if="eventData.event_format !== 'online'">
+          <label class="text-sm font-semibold text-text mb-1.5 block">Lokasi</label>
+          <div class="space-y-3">
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg">location_on</span>
+              <input
+                v-model="eventData.location"
+                type="text"
+                placeholder="Nama tempat (contoh: Universitas Indonesia)"
+                class="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+            </div>
             <input
-              v-model="eventData.location"
+              v-model="eventData.location_detail"
               type="text"
-              placeholder="Nama tempat atau alamat"
-              class="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              placeholder="Detail lokasi (contoh: Gedung Serbaguna, Jl. Margonda Raya)"
+              class="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             />
+            <div ref="locSearchContainer" class="relative">
+              <div class="relative">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg">search</span>
+                <input
+                  v-model="locSearchQuery"
+                  type="text"
+                  placeholder="Cari tempat di peta (contoh: UGM, Monas, Malioboro)"
+                  class="w-full bg-surface border border-border rounded-xl pl-10 pr-10 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+                <span v-if="locSearching" class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin text-lg">progress_activity</span>
+              </div>
+              <div
+                v-if="locShowDropdown && locSearchResults.length > 0"
+                class="absolute z-20 top-full mt-1 left-0 right-0 bg-surface-card border border-border rounded-xl shadow-lg overflow-hidden"
+              >
+                <button
+                  v-for="(r, i) in locSearchResults"
+                  :key="i"
+                  class="w-full text-left px-4 py-3 text-sm text-text hover:bg-surface-variant transition-colors border-b border-border/50 last:border-b-0 cursor-pointer flex items-start gap-3"
+                  @click="selectResult(r)"
+                >
+                  <span class="material-symbols-outlined text-lg text-text-muted shrink-0 mt-0.5">location_on</span>
+                  <div class="min-w-0">
+                    <p class="font-medium truncate">{{ (r as any).display_name?.split(',')[0] || (r as any).display_name }}</p>
+                    <p class="text-xs text-text-muted truncate">{{ (r as any).display_name?.split(',').slice(1).join(',')?.trim() || '' }}</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                class="text-xs text-primary font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                @click="showCoordInput = !showCoordInput"
+              >
+                <span class="material-symbols-outlined text-sm">pin_drop</span>
+                {{ showCoordInput ? 'Sembunyikan input koordinat' : 'Masukkan Koordinat' }}
+              </button>
+              <div v-if="showCoordInput" class="mt-2">
+                <div class="relative">
+                  <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg">pin_drop</span>
+                  <input
+                    v-model="coordInput"
+                    type="text"
+                    placeholder="-7.771729, 110.377133"
+                    class="w-full bg-surface border rounded-xl pl-10 pr-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all duration-200"
+                    :class="coordError ? 'border-error' : 'border-border'"
+                  />
+                </div>
+                <p v-if="coordError" class="text-xs text-error mt-1">{{ coordError }}</p>
+              </div>
+            </div>
+
+            <div ref="mapContainer" class="h-48 rounded-xl border border-border/50 overflow-hidden z-0" @click="initMap"></div>
+            <p v-if="eventData.location_lat && eventData.location_lng" class="text-[11px] text-text-muted">
+              Koordinat: {{ eventData.location_lat.toFixed(5) }}, {{ eventData.location_lng.toFixed(5) }}
+              <button class="text-primary hover:underline ml-2 cursor-pointer text-xs" @click="eventData.location_lat = null; eventData.location_lng = null; removeMap(); initMap()">Hapus</button>
+            </p>
+            <p class="text-[11px] text-text-muted">Cari tempat di kolom pencarian, lalu klik hasil untuk menandai di peta. Geser penanda untuk menyesuaikan.</p>
           </div>
         </div>
 
@@ -571,6 +888,16 @@ const removeInvitedAdmin = (idx: number) => {
               </div>
               <span class="text-xs text-text-muted font-medium">{{ tier.name || 'Warna kursi' }}</span>
             </div>
+            <div class="flex items-center justify-between mb-3 py-2 px-3 rounded-xl bg-surface/80 border border-border/30">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-lg text-text-muted">event_seat</span>
+                <span class="text-sm font-semibold text-text">Tiket Kursi</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="tier.seat_tier" class="sr-only peer" />
+                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label class="text-xs font-semibold text-text mb-1 block">Nama Tiket</label>
@@ -594,12 +921,17 @@ const removeInvitedAdmin = (idx: number) => {
               <div>
                 <label class="text-xs font-semibold text-text mb-1 block">Kuota Tiket</label>
                 <input
+                  v-if="!tier.seat_tier"
                   v-model.number="tier.limit"
                   type="number"
                   min="0"
                   placeholder="100"
                   class="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                 />
+                <div v-else class="flex items-center gap-2 w-full bg-surface-variant border border-border/50 rounded-xl px-3 py-2.5 text-sm text-text">
+                  <span class="material-symbols-outlined text-base text-text-muted">sync</span>
+                  <span class="flex-1">{{ (paintedSeatCountPerTier[tier.name] || 0) }} kursi</span>
+                </div>
               </div>
               <div>
                 <label class="text-xs font-semibold text-text mb-1 block">Deskripsi (opsional)</label>
@@ -632,11 +964,11 @@ const removeInvitedAdmin = (idx: number) => {
           <template v-if="useSeatMap">
             <SeatEditor
               v-model="seatMapData"
-              :tiers="ticketTiers.map(t => ({ name: t.name, price: t.price, color: t.color }))"
+              :tiers="ticketTiers.filter(t => t.seat_tier).map(t => ({ name: t.name, price: t.price, color: t.color }))"
             />
             <p class="text-xs text-text-muted mt-3">
-              Jumlah kursi akan otomatis menyelaraskan dengan kuota tiket saat disimpan.
-              Generator kursi akan membuat data kursi di database setelah acara dibuat.
+              Hanya tipe tiket yang diatur sebagai "Tiket Kursi" yang muncul di editor.
+              Kuota akan otomatis diselaraskan dengan jumlah kursi yang digambar.
             </p>
           </template>
         </div>

@@ -43,7 +43,7 @@ const main = async () => {
 
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 300,
+    max: 1200,
     standardHeaders: true,
     legacyHeaders: false
   })
@@ -51,13 +51,13 @@ const main = async () => {
 
   const searchLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 30,
+    max: 100,
     message: { error: 'Terlalu banyak permintaan pencarian' }
   })
 
   const uploadLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max: 60,
     message: { error: 'Terlalu banyak upload' }
   })
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { fetchWithRetry } from '@/lib/api'
-import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
@@ -24,6 +24,7 @@ const quantities = ref<Record<string, number>>({})
 const totalPrice = ref(0)
 const mapLoading = ref(false)
 const mapError = ref('')
+const copied = ref(false)
 
 const adminRoles = ref<string[] | null>(null)
 
@@ -31,7 +32,8 @@ const seatMapEnabled = ref(false)
 const seatMapGrid = ref({ gridX: 25, gridY: 20 })
 const seats = ref<SeatData[]>([])
 const seatTiers = ref<TierInfo[]>([])
-const selectedSeatIds = ref<string[]>([])
+const seatsByTier = ref<Record<string, string[]>>({})
+const activeSeatTierId = ref<string | null>(null)
 const sessionId = ref(`session_${Date.now()}_${Math.random().toString(36).slice(2)}`)
 const authToken = ref('')
 
@@ -44,6 +46,26 @@ const hasSelectedTier = computed(() => {
   return event.value.ticket_tiers.some((t: any) => (quantities.value[t.id] || 0) > 0)
 })
 
+const hasSeatTierSelected = computed(() => {
+  if (!event.value?.ticket_tiers) return false
+  return event.value.ticket_tiers.some((t: any) =>
+    t.seat_tier && (quantities.value[t.id] || 0) > 0
+  )
+})
+
+const canPurchase = computed(() => {
+  if (!hasSelectedTier.value) return false
+  if (hasSeatTierSelected.value) {
+    for (const tier of (event.value?.ticket_tiers || [])) {
+      if (!tier.seat_tier || !(quantities.value[tier.id] || 0)) continue
+      const needed = quantities.value[tier.id] || 0
+      const selected = seatsByTier.value[tier.id]?.length || 0
+      if (selected !== needed) return false
+    }
+  }
+  return true
+})
+
 const maxSeatsNeeded = computed(() => {
   if (!event.value?.ticket_tiers) return 0
   let total = 0
@@ -51,6 +73,21 @@ const maxSeatsNeeded = computed(() => {
     total += quantities.value[tier.id] || 0
   }
   return total || 1
+})
+
+const seatTiersWithQuantity = computed(() => {
+  if (!event.value?.ticket_tiers) return []
+  return event.value.ticket_tiers.filter((t: any) =>
+    t.seat_tier && (quantities.value[t.id] || 0) > 0
+  )
+})
+
+const allSelectedSeatIds = computed(() =>
+  Object.values(seatsByTier.value).flat()
+)
+
+const filteredSeatsForActiveTier = computed(() => {
+  return seats.value
 })
 
 const isAdmin = computed(() => {
@@ -109,6 +146,20 @@ const initMap = async (lat: number, lng: number) => {
   }).addTo(mapInstance)
 
   L.marker([lat, lng]).addTo(mapInstance)
+
+  setTimeout(() => mapInstance?.invalidateSize(), 200)
+}
+
+async function copyCoordinates() {
+  if (!event.value?.location_lat || !event.value?.location_lng) return
+  const text = `${event.value.location_lat}, ${event.value.location_lng}`
+  try {
+    await navigator.clipboard.writeText(text)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    // clipboard not available
+  }
 }
 
 const geocodeLocation = async (location: string) => {
@@ -186,8 +237,23 @@ const handleRequestTicket = async () => {
 
     const body: any = { event_id: event.value.id, items }
 
-    if (seatMapEnabled.value && selectedSeatIds.value.length > 0) {
-      body.seat_ids = selectedSeatIds.value
+    if (hasSeatTierSelected.value) {
+      for (const tier of event.value.ticket_tiers) {
+        if (!tier.seat_tier || !(quantities.value[tier.id] || 0)) continue
+        const needed = quantities.value[tier.id] || 0
+        const selected = seatsByTier.value[tier.id]?.length || 0
+        if (selected !== needed) {
+          requestError.value = `Pilih ${needed - selected} kursi lagi untuk ${tier.name}`
+          requestLoading.value = false
+          return
+        }
+      }
+    }
+
+    const allSeatIds = Object.values(seatsByTier.value).flat()
+    if (allSeatIds.length > 0) {
+      body.seat_ids = allSeatIds
+      body.seat_tier_map = { ...seatsByTier.value }
     }
 
     const res = await fetchWithRetry('/api/tickets', {
@@ -277,7 +343,9 @@ onMounted(async () => {
         }))
       }
 
-      if (event.value?.location) {
+      if (event.value?.location_lat && event.value?.location_lng) {
+        initMap(event.value.location_lat, event.value.location_lng)
+      } else if (event.value?.location) {
         geocodeLocation(event.value.location)
       }
     }
@@ -292,8 +360,35 @@ onMounted(async () => {
   }
 })
 
-function onSeatSelectionChange(ids: string[]) {
-  selectedSeatIds.value = ids
+watch(seatTiersWithQuantity, (tiers) => {
+  if (!tiers.length) {
+    activeSeatTierId.value = null
+  } else if (!activeSeatTierId.value || !tiers.some((t: any) => t.id === activeSeatTierId.value)) {
+    activeSeatTierId.value = tiers[0].id
+  }
+})
+
+function onTierSeatChange(tierId: string | null, ids: string[]) {
+  if (!tierId) return
+  const current = seatsByTier.value[tierId] || []
+  if (current.length === ids.length && current.every((id, i) => id === ids[i])) return
+  seatsByTier.value[tierId] = ids
+}
+
+function getSeatsNeededForTier(tierId: string | null) {
+  if (!tierId) return 0
+  return quantities.value[tierId] || 0
+}
+
+function getSeatsSelectedForTier(tierId: string | null) {
+  if (!tierId) return 0
+  return seatsByTier.value[tierId]?.length || 0
+}
+
+function getTierName(tierId: string | null) {
+  if (!tierId) return 'Tiket'
+  const tier = event.value?.ticket_tiers?.find((t: any) => t.id === tierId)
+  return tier?.name || 'Tiket'
 }
 </script>
 
@@ -365,16 +460,34 @@ function onSeatSelectionChange(ids: string[]) {
             </div>
             <div v-if="event.location" class="flex items-start gap-3 text-sm">
               <span class="material-symbols-outlined text-lg text-primary mt-0.5">location_on</span>
-              <p class="text-text-heading">{{ event.location }}</p>
+              <div>
+                <p class="text-text-heading">{{ event.location }}</p>
+                <p v-if="event.location_detail" class="text-text-muted text-xs mt-0.5">{{ event.location_detail }}</p>
+              </div>
             </div>
             <div v-if="event.location" class="mt-3">
-              <div v-if="mapLoading" class="h-48 rounded-xl bg-surface-variant flex items-center justify-center">
-                <span class="material-symbols-outlined text-3xl text-text-muted animate-spin">progress_activity</span>
+              <div class="relative h-48 rounded-xl border border-border/50 overflow-hidden">
+                <div v-if="mapLoading" class="absolute inset-0 bg-surface-variant flex items-center justify-center z-[1000]">
+                  <span class="material-symbols-outlined text-3xl text-text-muted animate-spin">progress_activity</span>
+                </div>
+                <div v-else-if="mapError" class="absolute inset-0 bg-surface-variant flex items-center justify-center z-[1000]">
+                  <p class="text-sm text-text-muted">{{ mapError }}</p>
+                </div>
+                <div ref="mapContainer" class="h-full w-full"></div>
               </div>
-              <div v-else-if="mapError" class="h-48 rounded-xl bg-surface-variant flex items-center justify-center">
-                <p class="text-sm text-text-muted">{{ mapError }}</p>
+              <div v-if="event.location_lat && event.location_lng" class="mt-1.5 flex items-center justify-between">
+                <p class="text-xs text-text-muted font-mono">{{ Number(event.location_lat).toFixed(6) }}, {{ Number(event.location_lng).toFixed(6) }}</p>
+                <div class="flex items-center gap-2">
+                  <button @click="copyCoordinates" class="text-xs text-primary hover:underline flex items-center gap-0.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">{{ copied ? 'check' : 'content_copy' }}</span>
+                    {{ copied ? 'Tersalin' : 'Salin' }}
+                  </button>
+                  <a :href="`https://www.google.com/maps?q=${event.location_lat},${event.location_lng}`" target="_blank" class="text-xs text-primary hover:underline flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-sm">open_in_new</span>
+                    Buka Maps
+                  </a>
+                </div>
               </div>
-              <div v-else ref="mapContainer" class="h-48 rounded-xl border border-border/50 overflow-hidden"></div>
             </div>
           </div>
 
@@ -396,7 +509,12 @@ function onSeatSelectionChange(ids: string[]) {
                   </h3>
                   <p class="text-sm text-text-muted mt-0.5">{{ tier.description || '' }}</p>
                 </div>
-                <p class="text-lg font-heading font-bold text-primary">Rp {{ (tier.price || 0).toLocaleString('id-ID') }}</p>
+                <div class="flex flex-col items-end gap-1.5">
+                  <p class="text-lg font-heading font-bold text-primary">Rp {{ (tier.price || 0).toLocaleString('id-ID') }}</p>
+                  <span v-if="tier.seat_tier" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600">
+                    Wajib Kursi
+                  </span>
+                </div>
               </div>
               <div class="flex items-center justify-between pt-3 border-t border-dashed border-border/50">
                 <p class="text-xs text-text-muted">
@@ -417,36 +535,56 @@ function onSeatSelectionChange(ids: string[]) {
                   >
                     <span class="material-symbols-outlined text-lg">add</span>
                   </button>
+
                 </div>
+              </div>
+              <div v-if="tier.seat_tier && (quantities[tier.id] || 0) > 0" class="mt-2 flex items-center gap-2 text-xs">
+                <span class="text-text-muted">Kursi dipilih:</span>
+                <span :class="getSeatsSelectedForTier(tier.id) === getSeatsNeededForTier(tier.id) ? 'text-teal-600 font-semibold' : 'text-amber-600 font-semibold'">
+                  {{ getSeatsSelectedForTier(tier.id) }}/{{ getSeatsNeededForTier(tier.id) }}
+                </span>
+                <span v-if="getSeatsSelectedForTier(tier.id) === getSeatsNeededForTier(tier.id)" class="text-teal-600">
+                  <span class="material-symbols-outlined text-sm align-middle">check_circle</span>
+                </span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div v-if="seatMapEnabled && !isCreator && !isAdmin" class="mt-6">
-        <h2 class="text-lg font-heading font-bold text-text-heading mb-4">Pilih Kursi</h2>
-        <p class="text-sm text-text-muted mb-4">
-          Pilih jumlah tiket terlebih dahulu, lalu pilih kursi yang tersedia di peta.
-        </p>
-        <template v-if="seats.length > 0">
+      <div v-if="seatMapEnabled" class="mt-6">
+        <h2 class="text-lg font-heading font-bold text-text-heading mb-3">Pilih Kursi</h2>
+        <div v-if="seatTiersWithQuantity.length > 1" class="flex gap-2 mb-4 overflow-x-auto">
+          <button
+            v-for="tier in seatTiersWithQuantity"
+            :key="tier.id"
+            @click="activeSeatTierId = tier.id"
+            class="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer"
+            :class="activeSeatTierId === tier.id ? 'bg-primary text-white' : 'bg-surface-variant text-text-muted hover:bg-primary/10'"
+          >
+            {{ tier.name }} ({{ getSeatsSelectedForTier(tier.id) }}/{{ getSeatsNeededForTier(tier.id) }})
+          </button>
+        </div>
+        <template v-if="filteredSeatsForActiveTier.length > 0 && activeSeatTierId">
           <SeatSelector
             v-if="authToken"
-            :seats="seats"
+            :seats="filteredSeatsForActiveTier"
             :gridX="seatMapGrid.gridX"
             :gridY="seatMapGrid.gridY"
             :tiers="seatTiers"
             :sessionId="sessionId"
             :authToken="authToken"
-            :maxSeats="maxSeatsNeeded"
-            @change="onSeatSelectionChange"
+            :maxSeats="getSeatsNeededForTier(activeSeatTierId)"
+            :activeTierId="activeSeatTierId"
+            :initialSelectedIds="seatsByTier[activeSeatTierId] || []"
+            :allSelectedIds="allSelectedSeatIds"
+            @change="(ids: string[]) => onTierSeatChange(activeSeatTierId, ids)"
           />
-          <p v-if="!hasSelectedTier" class="mt-3 text-xs text-amber-600 text-center">Pilih setidaknya satu tiket untuk mulai memilih kursi</p>
         </template>
         <div v-else class="bg-surface-card rounded-xl border border-border/50 p-8 text-center">
           <span class="material-symbols-outlined text-4xl text-text-muted mb-3">event_seat</span>
           <h3 class="text-sm font-semibold text-text-heading mb-1">Kursi Belum Tersedia</h3>
-          <p class="text-xs text-text-muted">Penyelenggara belum mengatur konfigurasi kursi untuk acara ini. Kamu tetap bisa memesan tiket tanpa memilih kursi.</p>
+          <p class="text-xs text-text-muted">Penyelenggara belum mengatur konfigurasi kursi untuk acara ini.</p>
         </div>
       </div>
 
@@ -456,13 +594,20 @@ function onSeatSelectionChange(ids: string[]) {
           <div>
             <p class="text-xs text-text-muted">Total</p>
             <p class="text-xl font-heading font-bold text-text-heading">Rp {{ totalPrice.toLocaleString('id-ID') }}</p>
-            <p v-if="seatMapEnabled && selectedSeatIds.length > 0" class="text-xs text-primary mt-1">
-              {{ selectedSeatIds.length }} kursi dipilih
+            <p v-if="seatMapEnabled && hasSeatTierSelected" class="text-xs text-primary mt-1">
+              {{ Object.values(seatsByTier).flat().length }} kursi dipilih
             </p>
           </div>
-          <BaseButton variant="primary" size="lg" :loading="requestLoading" @click="handleRequestTicket">
-            {{ requestLoading ? 'Memproses...' : 'Minta Tiket' }}
-          </BaseButton>
+          <div class="flex flex-col gap-1 items-end">
+            <template v-for="tier in seatTiersWithQuantity" :key="tier.id">
+              <p v-if="getSeatsSelectedForTier(tier.id) < getSeatsNeededForTier(tier.id)" class="text-xs text-amber-600">
+                {{ tier.name }}: pilih {{ getSeatsNeededForTier(tier.id) - getSeatsSelectedForTier(tier.id) }} kursi lagi
+              </p>
+            </template>
+            <BaseButton variant="primary" size="lg" :disabled="!canPurchase" :loading="requestLoading" @click="handleRequestTicket">
+              {{ requestLoading ? 'Memproses...' : 'Minta Tiket' }}
+            </BaseButton>
+          </div>
         </div>
       </div>
 

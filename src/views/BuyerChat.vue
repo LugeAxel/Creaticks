@@ -508,7 +508,7 @@ onUnmounted(() => {
                 v-model="messageText"
                 type="text"
                 placeholder="Ketik pesan..."
-                class="flex-1 rounded-2xl border border-border/50 bg-white/90 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                class="flex-1 rounded-2xl border border-border/50 bg-surface-card px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 @keyup.enter="sendMessage"
                 :disabled="!activeThread || sending"
               />

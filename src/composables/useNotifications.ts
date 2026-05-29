@@ -146,7 +146,7 @@ export function useNotifications() {
     await fetchNotifications()
     subscribeToRealtime()
     // Fallback polling every 30s in case WebSocket fails
-    pollInterval = setInterval(fetchNotifications, 30000)
+    pollInterval = setInterval(fetchNotifications, 60000)
   })
 
   onUnmounted(() => {

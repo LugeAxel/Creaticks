@@ -4,7 +4,11 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { getSocket, joinRoom, leaveRoom, onEvent, offEvent } from '@/lib/socket'
 import { useEventContext } from '@/composables/useEventContext'
+import { useToast } from '@/composables/useToast'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import { fetchWithRetry } from '@/lib/api'
+
+const { showToast } = useToast()
 
 const { event } = useEventContext()
 const eventId = event.id
@@ -25,6 +29,7 @@ interface TicketRequest {
 const tickets = ref<TicketRequest[]>([])
 const loading = ref(true)
 const activeFilter = ref<'all' | 'pending' | 'confirmed' | 'cancelled'>('all')
+const pendingAction = ref<string | null>(null)
 
 const filteredTickets = computed(() => {
   if (activeFilter.value === 'all') return tickets.value
@@ -50,37 +55,66 @@ const formatTimeAgo = (dateStr: string) => {
   return `${Math.floor(hours / 24)} hari lalu`
 }
 
+const withDebounce = async (ticketId: string, fn: () => Promise<void>) => {
+  if (pendingAction.value) return
+  pendingAction.value = ticketId
+  try {
+    await fn()
+  } finally {
+    pendingAction.value = null
+  }
+}
+
 const claimTicket = async (ticketId: string) => {
-  const token = (await supabase.auth.getSession()).data.session?.access_token
-  const res = await fetch(`/api/tickets/${ticketId}/claim`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ claim: true })
+  await withDebounce(ticketId, async () => {
+    const token = (await supabase.auth.getSession()).data.session?.access_token
+    const res = await fetch(`/api/tickets/${ticketId}/claim`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ claim: true })
+    })
+    if (res.ok) {
+      await fetchTickets()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      showToast(data.error || 'Gagal mengklaim tiket', 'error')
+    }
   })
-  if (res.ok) await fetchTickets()
 }
 
 const releaseTicket = async (ticketId: string) => {
-  const token = (await supabase.auth.getSession()).data.session?.access_token
-  const res = await fetch(`/api/tickets/${ticketId}/claim`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ claim: false })
+  await withDebounce(ticketId, async () => {
+    const token = (await supabase.auth.getSession()).data.session?.access_token
+    const res = await fetch(`/api/tickets/${ticketId}/claim`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ claim: false })
+    })
+    if (res.ok) {
+      await fetchTickets()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      showToast(data.error || 'Gagal melepas tiket', 'error')
+    }
   })
-  if (res.ok) await fetchTickets()
 }
 
 const updateStatus = async (ticketId: string, status: string) => {
-  const token = (await supabase.auth.getSession()).data.session?.access_token
-  const res = await fetch(`/api/tickets/${ticketId}/status`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ status })
+  await withDebounce(ticketId, async () => {
+    const token = (await supabase.auth.getSession()).data.session?.access_token
+    const res = await fetch(`/api/tickets/${ticketId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status })
+    })
+    if (res.ok) {
+      await fetchTickets()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      showToast(data.error || 'Gagal memperbarui status', 'error')
+    }
   })
-  if (res.ok) await fetchTickets()
 }
-
-import { fetchWithRetry } from '@/lib/api'
 
 const fetchTickets = async () => {
   const token = (await supabase.auth.getSession()).data.session?.access_token
@@ -205,23 +239,27 @@ onUnmounted(() => {
             v-if="!ticket.claimed_by"
             variant="primary"
             size="sm"
+            :disabled="pendingAction !== null"
             @click="claimTicket(ticket.id)"
           >Ambil</BaseButton>
           <BaseButton
             v-if="ticket.claimed_by"
             variant="secondary"
             size="sm"
+            :disabled="pendingAction !== null"
             @click="releaseTicket(ticket.id)"
           >Lepaskan</BaseButton>
           <BaseButton
             variant="primary"
             size="sm"
+            :disabled="pendingAction !== null"
             @click="updateStatus(ticket.id, 'confirmed')"
           >Konfirmasi</BaseButton>
           <BaseButton
             variant="secondary"
             size="sm"
             class="!text-error !border-error"
+            :disabled="pendingAction !== null"
             @click="updateStatus(ticket.id, 'cancelled')"
           >Tolak</BaseButton>
         </div>

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
+import { useToast } from '@/composables/useToast'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BackButton from '@/components/shared/BackButton.vue'
 
@@ -31,6 +32,7 @@ interface Message {
 const route = useRoute()
 const router = useRouter()
 const { user } = useAuth()
+const { showToast } = useToast()
 const eventId = route.params.eventId as string
 
 const threads = ref<Thread[]>([])
@@ -168,6 +170,7 @@ const confirmPayment = async () => {
     body: JSON.stringify({ status: 'confirmed' })
   })
   if (res.ok) {
+    showToast('Pembayaran berhasil dikonfirmasi', 'success')
     const content = 'Pembayaran telah dikonfirmasi. Tiket sudah aktif.'
     await fetch(`/api/chat/thread/${activeThread.value.id}/messages`, {
       method: 'POST',
@@ -175,6 +178,9 @@ const confirmPayment = async () => {
       body: JSON.stringify({ content, message_type: 'system' })
     })
     await loadMessages()
+  } else {
+    const data = await res.json().catch(() => ({}))
+    showToast(data.error || 'Gagal mengkonfirmasi pembayaran', 'error')
   }
 }
 
@@ -353,7 +359,14 @@ onUnmounted(() => {
                   ? 'bg-surface-card border border-border/50 rounded-bl-md'
                   : 'bg-teal-500 text-white rounded-br-md'"
               >
-                <p class="text-sm whitespace-pre-wrap">{{ msg.content }}</p>
+                <img
+                  v-if="msg.image_url"
+                  :src="msg.image_url"
+                  alt="Gambar"
+                  class="max-w-full rounded-xl mb-2"
+                  style="max-height: 200px;"
+                />
+                <p v-if="msg.content" class="text-sm whitespace-pre-wrap">{{ msg.content }}</p>
                 <p
                   class="text-[10px] mt-1"
                   :class="isBuyer(msg) ? 'text-text-muted' : 'text-white/70'"
@@ -368,7 +381,7 @@ onUnmounted(() => {
                 v-model="messageText"
                 type="text"
                 placeholder="Ketik pesan..."
-                class="flex-1 px-4 py-2.5 rounded-xl border border-border/50 bg-surface text-sm outline-none focus:border-teal-500 transition-colors"
+                class="flex-1 px-4 py-2.5 rounded-xl border border-border/50 bg-surface-card text-sm outline-none focus:border-teal-500 transition-colors"
               />
               <button
                 type="submit"

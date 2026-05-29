@@ -9,7 +9,7 @@ const VALID_CATEGORIES = ['Teknologi', 'Musik', 'Seni', 'Workshop', 'Olahraga', 
 
 const EVENT_SELECT = `
   *,
-  ticket_tiers(id, name, price, quota, description, color)
+  ticket_tiers(id, name, price, quota, description, color, seat_tier)
 `
 
 router.get('/', requireAuth, async (req, res) => {
@@ -131,7 +131,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 })
 
 router.post('/', requireAuth, async (req, res) => {
-  const { title, description, banner_url, date, location, category, event_format, visibility, status, gallery_urls, ticket_tiers, invited_admins } = req.body
+  const { title, description, banner_url, date, location, location_lat, location_lng, location_detail, category, event_format, visibility, status, gallery_urls, ticket_tiers, invited_admins, seat_map } = req.body
 
   if (!title || !title.trim()) {
     return res.status(400).json({ error: 'Nama acara wajib diisi' })
@@ -154,11 +154,15 @@ router.post('/', requireAuth, async (req, res) => {
       banner_url: banner_url || '',
       date,
       location: location || '',
+      location_lat: location_lat != null ? location_lat : null,
+      location_lng: location_lng != null ? location_lng : null,
+      location_detail: location_detail || '',
       category: category || '',
       event_format: event_format || 'offline',
       visibility: visibility || 'public',
       status: status || 'draft',
-      gallery_urls: gallery_urls || []
+      gallery_urls: gallery_urls || [],
+      seat_map: seat_map || null
     })
     .select()
     .single()
@@ -178,7 +182,8 @@ router.post('/', requireAuth, async (req, res) => {
       price: t.price || 0,
       quota: t.limit || t.quota || 0,
       description: t.description || '',
-      color: t.color || '#6C63FF'
+      color: t.color || '#6C63FF',
+      seat_tier: t.seat_tier || false
     }))
 
     const { error: tierError } = await supabaseAdmin
@@ -233,7 +238,7 @@ router.post('/', requireAuth, async (req, res) => {
 
 router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params
-  const { title, description, banner_url, date, location, category, event_format, visibility, status, gallery_urls, ticket_tiers } = req.body
+  const { title, description, banner_url, date, location, location_lat, location_lng, location_detail, category, event_format, visibility, status, gallery_urls, ticket_tiers } = req.body
 
   const { data: existing, error: fetchError } = await supabaseAdmin
     .from('events')
@@ -255,6 +260,9 @@ router.put('/:id', requireAuth, async (req, res) => {
   if (banner_url !== undefined) updates.banner_url = banner_url
   if (date !== undefined) updates.date = date
   if (location !== undefined) updates.location = location
+  if (location_lat !== undefined) updates.location_lat = location_lat
+  if (location_lng !== undefined) updates.location_lng = location_lng
+  if (location_detail !== undefined) updates.location_detail = location_detail
   if (category !== undefined) updates.category = category
   if (event_format !== undefined) updates.event_format = event_format
   if (visibility !== undefined) updates.visibility = visibility
@@ -300,7 +308,8 @@ router.put('/:id', requireAuth, async (req, res) => {
         price: t.price || 0,
         quota: t.limit || t.quota || 0,
         description: t.description || '',
-        color: t.color || '#6C63FF'
+        color: t.color || '#6C63FF',
+        seat_tier: t.seat_tier || false
       }))
 
       const { error: insertError } = await supabaseAdmin

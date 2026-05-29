@@ -27,10 +27,13 @@ const selectedTool = ref<'paint' | 'erase'>('paint')
 const selectedTierName = ref<string>(props.tiers[0]?.name || '')
 const isDragging = ref(false)
 
-const tierColors: Record<string, string> = {}
-const palette = ['#6C63FF', '#FF6584', '#43C6AC', '#FFB347', '#9B59B6', '#3498DB', '#E74C3C', '#2ECC71']
-props.tiers.forEach((t, i) => {
-  tierColors[t.name] = t.color || palette[i % palette.length]
+const tierColorMap = computed(() => {
+  const map: Record<string, string> = {}
+  const palette = ['#6C63FF', '#FF6584', '#43C6AC', '#FFB347', '#9B59B6', '#3498DB', '#E74C3C', '#2ECC71']
+  props.tiers.forEach((t, i) => {
+    map[t.name] = t.color || palette[i % palette.length]
+  })
+  return map
 })
 
 const seatMap = ref<Record<string, EditorSeat>>({})
@@ -132,7 +135,7 @@ function applyGridSize() {
 
 function getCellStyle(seat: { tier: string | null }): Record<string, string> {
   if (!seat.tier) return {}
-  const color = tierColors[seat.tier] || '#6C63FF'
+  const color = tierColorMap.value[seat.tier] || '#6C63FF'
   return {
     backgroundColor: color + '25',
     borderColor: color,
