@@ -210,10 +210,10 @@ const handleClick = () => {
     @click="handleClick"
   >
     <div
-      class="overflow-hidden transition-all duration-[250ms] group-hover:scale-[1.02] group-hover:shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
+      class="overflow-hidden transition-all duration-[250ms] group-hover:scale-[1.02] group-hover:shadow-[0_4px_8px_rgba(0,0,0,0.55)]"
       :style="{
         borderRadius: '20px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+        // boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
         backgroundColor: panelColor,
         transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
         '--panel-color': panelColor,
@@ -340,7 +340,7 @@ const handleClick = () => {
           </div>
 
           <!-- Action row -->
-          <div class="flex items-center justify-between mt-2 max-sm:mt-1.5 pr-1 pl-1 pb-1">
+          <div class="flex items-center justify-between max-sm:mt-1.5 pr-1 pl-1 ">
             <span class="text-white/65 text-[11px] min-sm:text-[11px] max-sm:text-[8px] font-mono leading-tight">{{ countdown }}</span>
             <button
               type="button"

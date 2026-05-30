@@ -45,6 +45,7 @@ interface WeatherData {
   temp_max: number
   temp_min: number
   weathercode: number
+  precip_prob: number
 }
 
 const now = ref(new Date())
@@ -192,9 +193,11 @@ const livingState = computed(() => {
 
 const countdownParts = computed(() => {
   const c = countdown.value
-  if (c.days > 0) return [{ label: 'hari', value: c.days }, { label: 'jam', value: c.hours }]
-  if (c.hours > 0) return [{ label: 'jam', value: c.hours }, { label: 'menit', value: c.minutes }]
-  return [{ label: 'menit', value: c.minutes }, { label: 'detik', value: c.seconds }]
+  const parts: { label: string; value: number }[] = []
+  if (c.days > 0) parts.push({ label: 'hari', value: c.days })
+  if (c.hours > 0 || c.days > 0) parts.push({ label: 'jam', value: c.hours })
+  parts.push({ label: 'menit', value: c.minutes }, { label: 'detik', value: c.seconds })
+  return parts
 })
 
 const updateCountdown = () => {
@@ -227,6 +230,18 @@ const weatherEmoji = (code: number) => {
   return 'thunderstorm'
 }
 
+const weatherDesc = (code: number) => {
+  if (code === 0) return 'Cerah'
+  if (code <= 3) return 'Sebagian Berawan'
+  if (code <= 48) return 'Berkabut'
+  if (code <= 57) return 'Gerimis'
+  if (code <= 67) return 'Hujan'
+  if (code <= 77) return 'Salju'
+  if (code <= 82) return 'Hujan Lebat'
+  if (code <= 86) return 'Hujan Salju'
+  return 'Badai'
+}
+
 const fetchWeather = async () => {
   if (!ticket.value?.event_location_lat || !ticket.value?.event_location_lng) return
   weatherLoading.value = true
@@ -235,7 +250,7 @@ const fetchWeather = async () => {
     const lat = ticket.value.event_location_lat
     const lng = ticket.value.event_location_lng
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&forecast_days=1`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max&timezone=auto&forecast_days=1`
     )
     if (!res.ok) throw new Error('Weather fetch failed')
     const data = await res.json()
@@ -244,6 +259,7 @@ const fetchWeather = async () => {
         temp_max: data.daily.temperature_2m_max[0],
         temp_min: data.daily.temperature_2m_min[0],
         weathercode: data.daily.weathercode[0],
+        precip_prob: data.daily.precipitation_probability_max?.[0] ?? 0,
       }
     }
   } catch {
@@ -404,75 +420,94 @@ onUnmounted(() => {
           </div>
 
           <!-- Classic Layout -->
-          <div v-if="layout === 'classic'">
-          <div class="h-32 overflow-hidden relative" :style="{ backgroundColor: 'var(--ticket-accent)' }">
-            <img v-if="ticket.event_banner" :src="ticket.event_banner" class="w-full h-full object-cover opacity-80" />
-            <div v-else class="w-full h-full flex items-center justify-center">
-              <span class="material-symbols-outlined text-4xl" :style="{ color: 'var(--ticket-text)' }">confirmation_number</span>
-            </div>
-          </div>
-
-          <div v-if="artworkSrc && artworkSrc !== ticket.event_banner" class="relative -mt-10 h-12 bg-cover bg-center opacity-20" :style="{ backgroundImage: `url(${artworkSrc})` }"></div>
-
-          <div class="px-5 pt-4 pb-3" :style="{ backgroundColor: 'var(--ticket-bg)', color: 'var(--ticket-text)' }">
-            <p class="text-[10px] tracking-[3px] uppercase mb-1.5" :style="{ color: 'var(--ticket-accent)' }">✦ CREATICK PRESENTS</p>
-            <h2 class="font-heading font-bold text-lg mb-1" :class="fontClass" :style="{ color: 'var(--ticket-text)' }">{{ ticket.event_title }}</h2>
-            <p class="text-xs flex items-center gap-1.5 mb-1" :style="{ color: 'var(--ticket-sub)' }">
-              <span class="material-symbols-outlined text-[14px]">calendar_today</span>
-              {{ formatDate(ticket.event_date) }}
-            </p>
-            <p class="text-xs flex items-center gap-1.5 mb-1" :style="{ color: 'var(--ticket-sub)' }">
-              <span class="material-symbols-outlined text-[14px]">schedule</span>
-              {{ formatTime(ticket.event_date) }}
-            </p>
-            <p v-if="ticket.event_location" class="text-xs flex items-center gap-1.5" :style="{ color: 'var(--ticket-sub)' }">
-              <span class="material-symbols-outlined text-[14px]">location_on</span>
-              {{ ticket.event_location }}
-            </p>
-          </div>
-
-          <div class="mx-5 relative">
-            <div class="h-px" :style="{ background: `repeating-linear-gradient(90deg, var(--ticket-accent) 0px, var(--ticket-accent) 6px, transparent 6px, transparent 12px)` }"></div>
-            <div class="absolute -left-3 -top-2.5 w-5 h-5 rounded-full border" :style="{ backgroundColor: 'var(--ticket-bg)', borderColor: 'var(--ticket-accent)' }"></div>
-            <div class="absolute -right-3 -top-2.5 w-5 h-5 rounded-full border" :style="{ backgroundColor: 'var(--ticket-bg)', borderColor: 'var(--ticket-accent)' }"></div>
-          </div>
-
-          <div class="px-5 pt-4 pb-5 flex flex-col items-center gap-3 text-center" :style="{ backgroundColor: 'var(--ticket-bg)', color: 'var(--ticket-text)' }">
-
-            <div class="relative">
-              <div ref="qrContainer" v-if="!qrError" class="rounded-2xl overflow-hidden shrink-0"></div>
-              <div v-else class="w-[200px] h-[200px] rounded-2xl bg-white flex items-center justify-center shrink-0">
-                <span class="text-xs text-gray-400 text-center px-2">QR Code</span>
+          <div v-if="layout === 'classic'" class="rounded-[20px] overflow-hidden" :style="{
+            backgroundColor: 'var(--ticket-bg)',
+            color: 'var(--ticket-text)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }">
+            <!-- Hero -->
+            <div class="h-[180px] overflow-hidden relative" :style="{ backgroundColor: 'var(--ticket-accent)' }">
+              <img v-if="ticket.event_banner" :src="ticket.event_banner" class="w-full h-full object-cover" />
+              <div v-else class="w-full h-full flex items-center justify-center">
+                <span class="material-symbols-outlined text-4xl opacity-30" :style="{ color: 'var(--ticket-text)' }">confirmation_number</span>
               </div>
-              <div v-if="ticket.is_checked_in" class="absolute top-1 right-1 bg-teal-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 z-10 backdrop-blur-sm">
-                <span class="material-symbols-outlined text-[12px]">check_circle</span>
-                Sudah Check-in
+              <div class="absolute inset-0" :style="{ background: `linear-gradient(to bottom, transparent 40%, var(--ticket-bg) 100%)` }"></div>
+            </div>
+
+            <!-- Artwork strip -->
+            <div v-if="artworkSrc && artworkSrc !== ticket.event_banner" class="relative -mt-10 h-12 bg-cover bg-center opacity-20" :style="{ backgroundImage: `url(${artworkSrc})` }"></div>
+
+            <!-- Accent bar -->
+            <div class="h-[3px]" :style="{ backgroundColor: 'var(--ticket-accent)' }"></div>
+
+            <!-- Body -->
+            <div class="px-5 pt-4 pb-3">
+              <p class="text-[10px] tracking-[3px] uppercase mb-1.5" :style="{ color: 'var(--ticket-accent)' }">✦ CREATICK PRESENTS</p>
+              <h2 class="font-heading font-bold text-lg mb-1" :class="fontClass" :style="{ color: 'var(--ticket-text)' }">{{ ticket.event_title }}</h2>
+              <p class="text-xs mb-4" :style="{ color: 'var(--ticket-sub)' }">{{ ticket.event_location }}</p>
+
+              <!-- 3-column meta row -->
+              <div class="flex rounded-[10px] overflow-hidden" :style="{ border: '1px solid rgba(255,255,255,0.06)' }">
+                <div class="flex-1 py-2.5 px-3 text-center" :style="{ borderRight: '1px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(255,255,255,0.03)' }">
+                  <p class="text-[9px] tracking-[2px] uppercase mb-1" :style="{ color: 'var(--ticket-accent)' }">Date</p>
+                  <p class="text-xs font-semibold" :style="{ color: 'var(--ticket-text)' }">{{ formatShortDate(ticket.event_date) }}</p>
+                </div>
+                <div class="flex-1 py-2.5 px-3 text-center" :style="{ borderRight: '1px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(255,255,255,0.03)' }">
+                  <p class="text-[9px] tracking-[2px] uppercase mb-1" :style="{ color: 'var(--ticket-accent)' }">Time</p>
+                  <p class="text-xs font-semibold" :style="{ color: 'var(--ticket-text)' }">{{ formatTime(ticket.event_date) }}</p>
+                </div>
+                <div class="flex-1 py-2.5 px-3 text-center" :style="{ backgroundColor: 'rgba(255,255,255,0.03)' }">
+                  <p class="text-[9px] tracking-[2px] uppercase mb-1" :style="{ color: 'var(--ticket-accent)' }">Location</p>
+                  <p class="text-xs font-semibold truncate" :style="{ color: 'var(--ticket-text)' }">{{ ticket.event_location || '—' }}</p>
+                </div>
               </div>
             </div>
-            <div v-if="ticket.is_checked_in" class="flex items-center gap-1.5 text-center mt-1">
+
+            <!-- Divider with notches -->
+            <div class="mx-5 relative">
+              <div class="h-px" :style="{ background: `repeating-linear-gradient(90deg, var(--ticket-accent) 0px, var(--ticket-accent) 6px, transparent 6px, transparent 12px)` }"></div>
+              <div class="absolute -left-3 -top-2.5 w-5 h-5 rounded-full" :style="{ backgroundColor: 'var(--ticket-bg)' }"></div>
+              <div class="absolute -right-3 -top-2.5 w-5 h-5 rounded-full" :style="{ backgroundColor: 'var(--ticket-bg)' }"></div>
+            </div>
+
+            <!-- Bottom section -->
+            <div class="px-5 pt-4 pb-5 flex items-start justify-between gap-3">
+              <div class="relative shrink-0">
+                <div ref="qrContainer" v-if="!qrError" class="rounded-[16px] overflow-hidden border" :style="{ borderColor: 'rgba(0,0,0,0.08)' }"></div>
+                <div v-else class="w-[100px] h-[100px] rounded-full bg-white flex items-center justify-center shrink-0 border p-10" :style="{ borderColor: 'rgba(0,0,0,0.08)' }">
+                  <span class="text-[10px] text-gray-400">QR</span>
+                </div>
+                <div v-if="ticket.is_checked_in" class="absolute -top-1 -right-2 bg-teal-500/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 backdrop-blur-sm">
+                  <span class="material-symbols-outlined text-[10px]">check_circle</span>
+                  Checked-in
+                </div>
+              </div>
+              <div class="flex-1 min-w-0 text-right">
+                <p class="text-sm font-bold leading-tight" :class="fontClass" :style="{ color: 'var(--ticket-text)' }">{{ ticket.holder_name }}</p>
+                <p class="text-[9px] font-mono mt-1.5" :style="{ color: 'var(--ticket-sub)' }">{{ ticket.tier_name }}</p>
+                <div class="flex items-center justify-end gap-1 mt-2">
+                  <button @click="idRevealed = !idRevealed" class="flex items-center gap-0.5 cursor-pointer group">
+                    <span class="material-symbols-outlined text-[12px]" :style="{ color: 'var(--ticket-sub)' }">{{ idRevealed ? 'visibility' : 'visibility_off' }}</span>
+                    <span v-if="!idRevealed" class="text-[9px] font-mono" :style="{ color: 'var(--ticket-sub)' }">••••••••</span>
+                    <span v-else class="text-[9px] font-mono" :style="{ color: 'var(--ticket-sub)' }">{{ ticket.id }}</span>
+                  </button>
+                  <button v-if="idRevealed" @click="copyId" class="flex items-center gap-0.5 cursor-pointer group">
+                    <span class="material-symbols-outlined text-[12px]" :style="{ color: copiedId ? 'var(--ticket-accent)' : 'var(--ticket-sub)' }">{{ copiedId ? 'check' : 'content_copy' }}</span>
+                    <span class="text-[9px]" :style="{ color: copiedId ? 'var(--ticket-accent)' : 'var(--ticket-sub)' }">{{ copiedId ? 'Tersalin' : 'Salin' }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Watermark -->
+            <p class="text-[8px] tracking-wider text-center py-3 font-mono" :style="{ color: 'var(--ticket-sub)', opacity: 0.25 }">✦ CREATICK · VERIFIED TICKET</p>
+
+            <!-- Check-in timestamp -->
+            <div v-if="ticket.is_checked_in" class="flex items-center justify-center gap-1.5 pb-3">
               <span class="material-symbols-outlined text-sm text-teal-500">check_circle</span>
               <span class="text-[10px] font-bold text-teal-500">{{ formatDateTime(ticket.checked_in_at || '') }}</span>
             </div>
-
-            <div>
-              <p class="text-sm font-bold" :class="fontClass" :style="{ color: 'var(--ticket-text)' }">{{ ticket.holder_name }}</p>
-              <p class="text-xs mt-1 inline-block px-3 py-1 rounded-full font-mono tracking-wider" :style="{ backgroundColor: 'var(--ticket-accent)', color: '#fff' }">{{ ticket.tier_name }}</p>
-              <div class="flex items-center justify-center gap-1.5 mt-2">
-                <button @click="idRevealed = !idRevealed" class="flex items-center gap-1 cursor-pointer group">
-                  <span class="material-symbols-outlined text-[14px]" :style="{ color: 'var(--ticket-sub)' }">{{ idRevealed ? 'visibility' : 'visibility_off' }}</span>
-                  <span v-if="!idRevealed" class="text-[10px] font-mono" :style="{ color: 'var(--ticket-sub)' }">••••••••</span>
-                  <span v-else class="text-[10px] font-mono" :style="{ color: 'var(--ticket-sub)' }">{{ ticket.id }}</span>
-                </button>
-                <button v-if="idRevealed" @click="copyId" class="flex items-center gap-0.5 cursor-pointer group">
-                  <span class="material-symbols-outlined text-[14px]" :style="{ color: copiedId ? 'var(--ticket-accent)' : 'var(--ticket-sub)' }">{{ copiedId ? 'check' : 'content_copy' }}</span>
-                  <span class="text-[10px]" :style="{ color: copiedId ? 'var(--ticket-accent)' : 'var(--ticket-sub)' }">{{ copiedId ? 'Tersalin' : 'Salin' }}</span>
-                </button>
-              </div>
-            </div>
           </div>
-
-          <p class="text-[8px] tracking-wider text-center py-3 font-mono" :style="{ color: 'var(--ticket-sub)', opacity: 0.4 }">✦ CREATICK · VERIFIED TICKET</p>
-        </div>
 
         <!-- Split Layout -->
         <div v-if="layout === 'split'" class="flex">
@@ -494,13 +529,13 @@ onUnmounted(() => {
             <div class="flex flex-col items-center gap-2 mt-3 pt-3 text-center" :style="{ borderTop: '1px solid rgba(255,255,255,0.06)' }">
 
               <div class="relative">
-                <div ref="qrContainer" v-if="!qrError" class="rounded-2xl overflow-hidden shrink-0"></div>
-                <div v-else class="w-[140px] h-[140px] rounded-2xl bg-white flex items-center justify-center shrink-0">
+                <div ref="qrContainer" v-if="!qrError" class="rounded-[16px] overflow-hidden border shrink-0"></div>
+                <div v-else class="w-[140px] h-[140px] rounded-[16px] overflow-hidden border bg-white flex items-center justify-center shrink-0">
                   <span class="text-[10px] text-gray-400">QR</span>
                 </div>
-                <div v-if="ticket.is_checked_in" class="absolute top-0.5 right-0.5 bg-teal-500/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 backdrop-blur-sm">
+                <div v-if="ticket.is_checked_in" class="absolute -top-4 right-2.5 bg-teal-500/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 backdrop-blur-sm">
                   <span class="material-symbols-outlined text-[10px]">check_circle</span>
-                  Sudah Check-in
+                  Sudah Checked-in
                 </div>
               </div>
               <div v-if="ticket.is_checked_in" class="flex items-center gap-1 text-[10px] text-teal-500">
@@ -543,13 +578,13 @@ onUnmounted(() => {
             <div class="flex flex-col items-center gap-2 text-center">
 
               <div class="relative">
-                <div ref="qrContainer" v-if="!qrError" class="rounded-2xl overflow-hidden shrink-0"></div>
-                <div v-else class="w-[140px] h-[140px] rounded-2xl bg-white/90 flex items-center justify-center shrink-0">
+                <div ref="qrContainer" v-if="!qrError" class="rounded-[16px] overflow-hidden shrink-0"></div>
+                <div v-else class="w-[140px] h-[140px] rounded-[16px] overflow-hidden bg-white/90 flex items-center justify-center shrink-0">
                   <span class="text-[10px] text-gray-500">QR</span>
                 </div>
-                <div v-if="ticket.is_checked_in" class="absolute top-0.5 right-0.5 bg-teal-500/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 backdrop-blur-sm">
+                <div v-if="ticket.is_checked_in" class="absolute -top-4 right-2.5 bg-teal-500/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 backdrop-blur-sm">
                   <span class="material-symbols-outlined text-[10px]">check_circle</span>
-                  Sudah Check-in
+                  Sudah Checked-in
                 </div>
               </div>
               <div v-if="ticket.is_checked_in" class="flex items-center gap-1 text-[10px]">
@@ -603,17 +638,22 @@ onUnmounted(() => {
           <div v-if="weather || weatherLoading || weatherError" class="bg-surface-card rounded-2xl shadow-sm p-5">
             <div v-if="weatherLoading" class="flex items-center justify-center gap-2 py-2">
               <span class="material-symbols-outlined text-lg text-text-muted animate-spin">progress_activity</span>
-              <span class="text-xs text-text-muted">Memuat prakiraan cuaca...</span>
+              <span class="text-xs text-text-muted">Memuat perkiraan cuaca...</span>
             </div>
             <div v-else-if="weatherError" class="text-center py-2">
-              <span class="material-symbols-outlined text-lg text-text-muted">cloud_off</span>
+              <span class="material-symbols-outlined text-xl text-text-muted ">cloud_off</span>
               <p class="text-xs text-text-muted mt-1">Cuaca tidak tersedia</p>
             </div>
-            <div v-else-if="weather" class="flex items-center justify-center gap-4">
-              <span class="material-symbols-outlined text-3xl text-primary">{{ weatherEmoji(weather.weathercode) }}</span>
+            <div v-else-if="weather" class="flex items-center justify-evenly gap-4">
+              <span class="material-symbols-outlined text-primary" style="font-size:48px;">{{ weatherEmoji(weather.weathercode) }}</span>
               <div class="text-left">
-                <p class="text-xs text-text-muted uppercase tracking-wider mb-0.5">Prakiraan Cuaca</p>
+                <p class="text-xs text-text-muted uppercase tracking-wider mb-0.5">Perkiraan Cuaca</p>
+                <p class="text-sm font-semibold text-text-heading">{{ weatherDesc(weather.weathercode) }}</p>
                 <p class="text-lg font-bold font-mono text-text-heading">{{ Math.round(weather.temp_max) }}° / {{ Math.round(weather.temp_min) }}°</p>
+                <p v-if="weather.precip_prob > 0" class="text-xs text-text-muted mt-0.5">
+                  <span class="material-symbols-outlined align-text-bottom" style="font-size: 16px;">water_drop</span>
+                  {{ weather.precip_prob }}%
+                </p>
               </div>
             </div>
           </div>

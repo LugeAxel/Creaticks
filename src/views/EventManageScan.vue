@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { fetchWithRetry } from '@/lib/api'
 import { useEventContext } from '@/composables/useEventContext'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
@@ -126,15 +127,14 @@ function onScanSuccess(decodedText: string) {
 const validateTicket = async (ticketId: string) => {
   validating.value = true
   scanResult.value = null
-  const token = (await supabase.auth.getSession()).data.session?.access_token
 
   try {
     const body: Record<string, any> = { event_id: eventId }
     if (scanSecret.value) body.scan_secret = scanSecret.value
 
-    const res = await fetch(`/api/tickets/${ticketId}/validate`, {
+    const res = await fetchWithRetry(`/api/tickets/${ticketId}/validate`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     })
 
@@ -167,15 +167,12 @@ const validateTicket = async (ticketId: string) => {
 const handleIdentify = async (ticketId: string) => {
   validating.value = true
   scanResult.value = null
-  const token = (await supabase.auth.getSession()).data.session?.access_token
 
   try {
     const params = new URLSearchParams({ event_id: eventId })
     if (scanSecret.value) params.set('scan_secret', scanSecret.value)
 
-    const res = await fetch(`/api/tickets/${ticketId}/identify?${params}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    const res = await fetchWithRetry(`/api/tickets/${ticketId}/identify?${params}`)
 
     if (res.ok) {
       const data = await res.json()
@@ -188,7 +185,6 @@ const handleIdentify = async (ticketId: string) => {
         identify: t
       }
       vibrate(100)
-      startAutoDismiss()
     } else {
       const data = await res.json()
       scanResult.value = {
@@ -240,7 +236,8 @@ const decodeQrFromImage = async (file: File) => {
     codeScanner.clear()
     if (result && !scanLocked) {
       scanLocked = true
-      validateTicket(result)
+      if (scanMode.value === 'attendance') validateTicket(result)
+      else handleIdentify(result)
     }
   } catch {
     // no QR detected
@@ -377,49 +374,61 @@ onUnmounted(() => {
     <!-- Identify result -->
     <Transition name="scan-result">
       <div
-        v-if="scanResult && scanMode === 'identify' && scanResult.identify"
-        :key="scanResult.identify.is_checked_in ? 'checked' : 'valid'"
+        v-if="scanResult && scanMode === 'identify'"
+        :key="scanResult.success ? 'success' : 'failure'"
         class="rounded-2xl p-6 border"
-        :class="scanResult.identify.is_checked_in ? 'bg-amber-500/10 border-amber-500/30' : 'bg-teal-500/10 border-teal-500/30'"
-        @mouseenter="cancelAutoDismiss"
-        @mouseleave="scanResult.success && startAutoDismiss()"
+        :class="scanResult.success
+          ? (scanResult.identify?.is_checked_in ? 'bg-amber-500/10 border-amber-500/30' : 'bg-teal-500/10 border-teal-500/30')
+          : 'bg-red-500/10 border-red-500/30 shake'"
       >
-        <div class="flex items-center gap-2 mb-4">
-          <span
-            class="material-symbols-outlined text-2xl"
-            :class="scanResult.identify.is_checked_in ? 'text-amber-500' : 'text-teal-500'"
-          >{{ scanResult.identify.is_checked_in ? 'assignment_turned_in' : 'verified' }}</span>
-          <span class="text-xs font-semibold px-2.5 py-1 rounded-full" :class="scanResult.identify.is_checked_in ? 'bg-amber-500/20 text-amber-600' : 'bg-teal-500/20 text-teal-600'">
-            {{ scanResult.identify.is_checked_in ? 'Sudah Check-in' : 'Tiket Valid' }}
-          </span>
-        </div>
-        <div class="space-y-2 text-sm text-left">
-          <div class="flex justify-between">
-            <span class="text-text-muted">Nama</span>
-            <span class="font-semibold text-text-heading">{{ scanResult.identify.holder_name }}</span>
+        <!-- Success -->
+        <template v-if="scanResult.success && scanResult.identify">
+          <div class="flex items-center gap-2 mb-4">
+            <span
+              class="material-symbols-outlined text-2xl"
+              :class="scanResult.identify.is_checked_in ? 'text-amber-500' : 'text-teal-500'"
+            >{{ scanResult.identify.is_checked_in ? 'assignment_turned_in' : 'verified' }}</span>
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-full" :class="scanResult.identify.is_checked_in ? 'bg-amber-500/20 text-amber-600' : 'bg-teal-500/20 text-teal-600'">
+              {{ scanResult.identify.is_checked_in ? 'Sudah Check-in' : 'Tiket Valid' }}
+            </span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-text-muted">Email</span>
-            <span class="text-text-heading">{{ scanResult.identify.holder_email }}</span>
+          <div class="space-y-2 text-sm text-left">
+            <div class="flex justify-between">
+              <span class="text-text-muted">Nama</span>
+              <span class="font-semibold text-text-heading">{{ scanResult.identify.holder_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-text-muted">Email</span>
+              <span class="text-text-heading">{{ scanResult.identify.holder_email }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-text-muted">Tipe</span>
+              <span class="font-semibold text-text-heading">{{ scanResult.identify.tier_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-text-muted">Event</span>
+              <span class="text-text-heading text-right max-w-[200px]">{{ scanResult.identify.event_title }}</span>
+            </div>
+            <div v-if="scanResult.identify.seat" class="flex justify-between">
+              <span class="text-text-muted">Kursi</span>
+              <span class="font-semibold text-text-heading">{{ scanResult.identify.seat.seat_code }}</span>
+            </div>
+            <div v-if="scanResult.identify.checked_in_at" class="flex justify-between">
+              <span class="text-text-muted">Check-in</span>
+              <span class="text-text-heading">{{ new Date(scanResult.identify.checked_in_at).toLocaleString('id-ID') }}</span>
+            </div>
           </div>
-          <div class="flex justify-between">
-            <span class="text-text-muted">Tipe</span>
-            <span class="font-semibold text-text-heading">{{ scanResult.identify.tier_name }}</span>
+        </template>
+
+        <!-- Failure -->
+        <template v-else>
+          <div class="text-center">
+            <span class="material-symbols-outlined text-5xl text-red-500">cancel</span>
+            <h3 class="text-lg font-heading font-bold text-red-600 mt-2">Identifikasi Gagal</h3>
+            <p class="text-sm text-text-muted mt-1">{{ scanResult.message }}</p>
           </div>
-          <div class="flex justify-between">
-            <span class="text-text-muted">Event</span>
-            <span class="text-text-heading text-right max-w-[200px]">{{ scanResult.identify.event_title }}</span>
-          </div>
-          <div v-if="scanResult.identify.seat" class="flex justify-between">
-            <span class="text-text-muted">Kursi</span>
-            <span class="font-semibold text-text-heading">{{ scanResult.identify.seat.seat_code }}</span>
-          </div>
-          <div v-if="scanResult.identify.checked_in_at" class="flex justify-between">
-            <span class="text-text-muted">Check-in</span>
-            <span class="text-text-heading">{{ new Date(scanResult.identify.checked_in_at).toLocaleString('id-ID') }}</span>
-          </div>
-        </div>
-        <p v-if="!scanResult.success" class="text-sm text-error mt-3 text-center">{{ scanResult.message }}</p>
+        </template>
+
         <div class="mt-4 text-center">
           <BaseButton variant="primary" @click="handleScanAgain">Scan Lagi</BaseButton>
         </div>

@@ -454,6 +454,29 @@ router.post('/', requireAuth, async (req, res) => {
   res.status(201).json({ tickets: created })
 })
 
+router.get('/latest', async (req, res) => {
+  try {
+    const { data: tickets, error } = await supabaseAdmin
+      .from('ticket_requests')
+      .select(`id, user_id, tier_name, created_at, events!inner(title)`)
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (error) return res.status(500).json({ error: 'Gagal memuat data' })
+
+    const enriched = await Promise.all(tickets.map(async (t) => {
+      const { data: user } = await supabaseAdmin.auth.admin.getUserById(t.user_id)
+      const name = user?.user?.user_metadata?.name || user?.user?.email?.split('@')[0] || 'Unknown'
+      return { buyer_name: name, tier_name: t.tier_name, event_title: t.events.title, created_at: t.created_at }
+    }))
+
+    res.json(enriched)
+  } catch {
+    res.status(500).json({ error: 'Gagal memuat data' })
+  }
+})
+
 router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params
   const userId = req.user.id
@@ -627,11 +650,12 @@ router.put('/:id/status', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal memperbarui status tiket' })
   }
 
-  // Handle invoice generation when status becomes confirmed
+  // Handle invoice generation + global purchase ticker when status becomes confirmed
   if (status === 'confirmed') {
+    let buyerName = 'Unknown'
     try {
       const { data: buyerUser } = await supabaseAdmin.auth.admin.getUserById(ticket.user_id)
-      const buyerName = buyerUser?.user?.user_metadata?.name || buyerUser?.user?.email?.split('@')[0] || 'Unknown'
+      buyerName = buyerUser?.user?.user_metadata?.name || buyerUser?.user?.email?.split('@')[0] || 'Unknown'
 
       const { data: tier } = await supabaseAdmin
         .from('ticket_tiers')
@@ -674,6 +698,16 @@ router.put('/:id/status', requireAuth, async (req, res) => {
         requestId: req.requestId,
         ticketId: id,
         error: invoiceErr.message
+      })
+    }
+
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('purchase:new', {
+        buyer_name: buyerName,
+        tier_name: ticket.tier_name,
+        event_title: ticket.events.title,
+        created_at: new Date().toISOString()
       })
     }
   }

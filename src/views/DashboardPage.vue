@@ -164,7 +164,7 @@ onMounted(async () => {
           <div class="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div class="flex-1">
               <h1 class="text-2xl font-heading font-bold text-text-heading">{{ greeting }}</h1>
-              <p class="text-sm text-text-muted mt-1 max-w-lg">{{ contextualSubtitle }}</p>
+              <p class="text-sm text-text-heading/50 mt-1 max-w-lg">{{ contextualSubtitle }}</p>
             </div>
             <div
               v-if="nearestTicket"
@@ -187,31 +187,31 @@ onMounted(async () => {
         <!-- Quick Actions -->
         <div class="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
           <button
-            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-muted hover:bg-surface-variant transition-colors cursor-pointer"
+            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
             @click="router.push('/acara')"
           >
-            <span class="material-symbols-outlined text-lg">search</span>
+            <span class="material-symbols-outlined text-lg text-text-heading/50">search</span>
             Cari Acara
           </button>
           <button
-            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-muted hover:bg-surface-variant transition-colors cursor-pointer"
+            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
             @click="router.push('/tiket')"
           >
-            <span class="material-symbols-outlined text-lg">confirmation_number</span>
+            <span class="material-symbols-outlined text-lg text-text-heading/50">confirmation_number</span>
             Tiket Saya
           </button>
           <button v-if="isCreator"
-            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-muted hover:bg-surface-variant transition-colors cursor-pointer"
+            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
             @click="router.push('/acara-saya')"
           >
-            <span class="material-symbols-outlined text-lg">event</span>
+            <span class="material-symbols-outlined text-lg text-text-heading/50">event</span>
             Acara Saya
           </button>
           <button v-if="isCreator"
-            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-muted hover:bg-surface-variant transition-colors cursor-pointer"
+            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
             @click="router.push({ name: 'event-editor' })"
           >
-            <span class="material-symbols-outlined text-lg">add_circle</span>
+            <span class="material-symbols-outlined text-lg text-text-heading/50">add_circle</span>
             Buat Acara
           </button>
         </div>
@@ -220,7 +220,7 @@ onMounted(async () => {
         <div v-if="favoriteCategory" class="bg-gradient-to-r from-primary/5 to-accent/5 rounded-2xl border border-primary/10 px-5 py-4">
           <p class="text-sm text-text-heading">
             <span class="font-semibold">Kamu suka acara {{ favoriteCategory }}!</span>
-            <span class="text-text-muted"> Terus eksplorasi event seru di kategori ini.</span>
+            <span class="text-text-heading/50"> Terus eksplorasi event seru di kategori ini.</span>
           </p>
         </div>
 
@@ -231,7 +231,7 @@ onMounted(async () => {
               <span class="material-symbols-outlined text-lg text-primary">confirmation_number</span>
             </div>
             <div>
-              <p class="text-xs text-text-muted">Total Tiket Terjual</p>
+              <p class="text-xs text-text-heading/50">Total Tiket Terjual</p>
               <p class="text-sm font-bold text-text-heading">{{ globalStats.total_sold.toLocaleString('id-ID') }}</p>
             </div>
           </div>
@@ -240,7 +240,7 @@ onMounted(async () => {
               <span class="material-symbols-outlined text-lg text-warning">bolt</span>
             </div>
             <div>
-              <p class="text-xs text-text-muted">Terjual 1 Jam</p>
+              <p class="text-xs text-text-heading/50">Terjual 1 Jam</p>
               <p class="text-sm font-bold text-text-heading">{{ globalStats.recent_sales_1h.toLocaleString('id-ID') }} tiket</p>
             </div>
           </div>
@@ -249,7 +249,7 @@ onMounted(async () => {
               <span class="material-symbols-outlined text-lg text-success">groups</span>
             </div>
             <div>
-              <p class="text-xs text-text-muted">Penonton Hadir</p>
+              <p class="text-xs text-text-heading/50">Penonton Hadir</p>
               <p class="text-sm font-bold text-text-heading">{{ globalStats.checked_in_count.toLocaleString('id-ID') }} orang</p>
             </div>
           </div>
@@ -258,7 +258,7 @@ onMounted(async () => {
               <span class="material-symbols-outlined text-lg text-primary">event</span>
             </div>
             <div>
-              <p class="text-xs text-text-muted">Acara Aktif</p>
+              <p class="text-xs text-text-heading/50">Acara Aktif</p>
               <p class="text-sm font-bold text-text-heading">{{ globalStats.event_count.toLocaleString('id-ID') }} acara</p>
             </div>
           </div>
@@ -266,7 +266,7 @@ onMounted(async () => {
 
         <!-- Active Tickets -->
         <div v-if="activeTickets.length > 0">
-          <h2 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">
+          <h2 class="text-sm font-semibold text-text-heading/50 uppercase tracking-wide mb-4">
             {{ activeTickets.length === 1 ? 'Tiket Kamu' : `Tiket Kamu (${activeTickets.length})` }}
           </h2>
           <div class="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
@@ -296,7 +296,7 @@ onMounted(async () => {
                   />
                   <div class="absolute bottom-5 left-4 right-4">
                     <h3 class="text-white font-heading font-bold text-base drop-shadow-sm truncate">{{ ticket.event_name }}</h3>
-                    <p class="text-white/80 text-xs mt-0.5">{{ formatDate(ticket.event_date) }}</p>
+                    <p class="text-white/70  text-xs mt-0.5">{{ formatDate(ticket.event_date) }}</p>
                   </div>
                   <!-- Urgency badge -->
                   <div
@@ -313,7 +313,7 @@ onMounted(async () => {
                   <div class="flex items-center justify-between mb-3">
                     <div>
                       <p class="text-sm font-semibold text-text-heading">{{ ticket.tier_name || 'Regular' }}</p>
-                      <p class="text-xs text-text-muted font-mono mt-0.5">{{ ticket.ticket_id }}</p>
+                      <p class="text-xs text-text-heading/50 font-mono mt-0.5">{{ ticket.ticket_id }}</p>
                     </div>
                     <span
                       class="text-[10px] font-semibold px-2.5 py-1 rounded-full"
@@ -340,7 +340,7 @@ onMounted(async () => {
             </button>
           </div>
 
-          <div v-if="upcomingEvents.length > 0" class="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
+          <div v-if="upcomingEvents.length > 0" class="flex gap-4 overflow-x-auto p-4 snap-x snap-mandatory scrollbar-hide">
             <div
               v-for="ev in upcomingEvents"
               :key="ev.id"
@@ -351,9 +351,9 @@ onMounted(async () => {
           </div>
 
           <div v-else class="rounded-2xl border-2 border-dashed border-border/60 p-8 text-center">
-            <span class="material-symbols-outlined text-5xl text-text-muted mb-3">explore</span>
+            <span class="material-symbols-outlined text-5xl text-text-heading/50 mb-3">explore</span>
             <h3 class="text-base font-heading font-semibold text-text-heading mb-1">Belum ada acara baru</h3>
-            <p class="text-sm text-text-muted mb-4">Cek lagi nanti, atau bagikan Creatick ke temanmu yang punya event!</p>
+            <p class="text-sm text-text-heading/50 mb-4">Cek lagi nanti, atau bagikan Creatick ke temanmu yang punya event!</p>
             <BaseButton variant="primary" size="sm" @click="router.push('/acara')">Cari Acara</BaseButton>
           </div>
         </div>
@@ -361,9 +361,9 @@ onMounted(async () => {
         <!-- Recommendations -->
         <div v-if="recommendedEvents.length > 0">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-sm font-semibold text-text-muted uppercase tracking-wide">Rekomendasi untukmu</h2>
+            <h2 class="text-sm font-semibold text-text-heading/50 uppercase tracking-wide">Rekomendasi untukmu</h2>
           </div>
-          <div class="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
+          <div class="flex gap-4 overflow-x-auto pt-4 pb-4 snap-x snap-mandatory scrollbar-hide">
             <div
               v-for="ev in recommendedEvents"
               :key="ev.id"
@@ -377,8 +377,8 @@ onMounted(async () => {
         <!-- History -->
         <div v-if="history.length > 0">
           <div class="flex items-center gap-2 mb-4">
-            <h2 class="text-sm font-semibold text-text-muted uppercase tracking-wide">Riwayat</h2>
-            <span class="text-xs text-text-muted/70">({{ historyCompletedCount }} acara sudah kamu hadiri)</span>
+            <h2 class="text-sm font-semibold text-text-heading/50 uppercase tracking-wide">Riwayat</h2>
+            <span class="text-xs text-text-heading/50">({{ historyCompletedCount }} acara sudah kamu hadiri)</span>
           </div>
           <div class="space-y-3">
             <div
@@ -418,7 +418,7 @@ onMounted(async () => {
 
 <style scoped>
 .hero-bg {
-  background: linear-gradient(135deg, rgba(108,99,255,0.12), rgba(255,101,132,0.12), rgba(67,198,172,0.12), rgba(255,179,71,0.12));
+  background: linear-gradient(135deg, rgba(107, 99, 255, 0.500), rgba(255, 101, 132,0.500), rgba(67, 198, 172, 0.500), rgba(255, 178, 71, 0.500));
   background-size: 300% 300%;
   animation: hue-shift 8s ease-in-out infinite alternate;
 }

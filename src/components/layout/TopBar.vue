@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import NotificationBell from './NotificationBell.vue'
 import ConnectionStatus from '@/components/shared/ConnectionStatus.vue'
+import PurchaseTicker from '@/components/shared/PurchaseTicker.vue'
 import { useDarkMode } from '@/composables/useDarkMode'
 import type { User } from '@supabase/supabase-js'
 
@@ -135,4 +136,6 @@ const getInitial = (u: User | null | undefined) => {
       </template>
     </div>
   </header>
+
+  <PurchaseTicker />
 </template>

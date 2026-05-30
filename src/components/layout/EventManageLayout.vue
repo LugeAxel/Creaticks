@@ -3,6 +3,7 @@ import { onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useEventContextLoader } from '@/composables/useEventContext'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
+import PurchaseTicker from '@/components/shared/PurchaseTicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -128,6 +129,7 @@ onMounted(() => {
     </aside>
 
     <main class="flex-1 bg-surface min-h-screen overflow-y-auto">
+      <PurchaseTicker :stickyOffset="0" />
       <router-view />
     </main>
   </div>
