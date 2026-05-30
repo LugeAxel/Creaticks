@@ -4,6 +4,7 @@ import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
 import { createNotification } from './notifications.js'
 import ExcelJS from 'exceljs'
+import { recordEvent } from '../monitoring/metrics.js'
 
 const router = Router()
 
@@ -19,6 +20,55 @@ function withLock(key, fn) {
     if (locks.get(key) === promise) locks.delete(key)
   })
   return promise
+}
+
+const MAX_REFERENCE_LENGTH = 128
+const MAX_BANK_NAME_LENGTH = 64
+const MAX_APPROVAL_NOTE_LENGTH = 500
+
+function isValidCloudinaryUrl(url) {
+  return typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url)
+}
+
+function normalizeString(value, maxLength) {
+  if (!value) return ''
+  const trimmed = value.toString().trim()
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed
+}
+
+async function logAudit({ requestId = null, actorId = null, actorRole = null, action = '', metadata = {} }) {
+  try {
+    await supabaseAdmin
+      .from('ticket_audit_log')
+      .insert({ request_id: requestId, actor_id: actorId, actor_role: actorRole, action, metadata })
+  } catch (e) {
+    logger.warn('AUDIT', 'Failed to write audit log', { error: e?.message || String(e), requestId, action })
+  }
+}
+
+async function getAcceptedEventRoleId(eventId, userId) {
+  const { data, error } = await supabaseAdmin
+    .from('event_roles')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('user_id', userId)
+    .eq('status', 'accepted')
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data.id
+}
+
+async function logEventRoleActivity(eventId, userId, action, metadata = {}) {
+  const roleId = await getAcceptedEventRoleId(eventId, userId)
+  if (!roleId) return
+  try {
+    await supabaseAdmin
+      .from('event_role_activity')
+      .insert({ event_role_id: roleId, action, performed_by: userId, metadata })
+  } catch (e) {
+    logger.warn('ROLE-ACTIVITY', 'Failed to log event role activity', { error: e?.message || String(e), eventId, userId, action })
+  }
 }
 
 router.get('/', requireAuth, async (req, res) => {
@@ -574,80 +624,59 @@ router.put('/:id/status', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Tiket sudah diproses sebelumnya' })
   }
 
-  // Serialize confirm path to avoid race updating sold_count
-  const lockKey = `event:${ticket.event_id}:tier:${ticket.tier_name}`
-  try {
-    await withLock(lockKey, async () => {
-      const { error: updateError } = await supabaseAdmin
-        .from('ticket_requests')
-        .update({ status })
-        .eq('id', id)
+  // Require payment proof before allowing confirmation (for manual transfers)
+  if (status === 'confirmed') {
+    try {
+      const { data: existingInvoice } = await supabaseAdmin
+        .from('invoices')
+        .select('*')
+        .eq('ticket_request_id', id)
+        .maybeSingle()
 
-      if (updateError) {
-        logger.error('TICKETS-STATUS', 'Failed to update ticket status', {
-          requestId: req.requestId,
-          ticketId: id,
-          status,
-          error: updateError.message
-        })
-        throw new Error('update_failed')
-      }
-
-      // When confirming, increment sold_count in ticket_tiers and mark seats as owned
-      if (status === 'confirmed') {
-        try {
-          const { data: tier } = await supabaseAdmin
-            .from('ticket_tiers')
-            .select('id, sold_count')
-            .eq('event_id', ticket.event_id)
-            .eq('name', ticket.tier_name)
-            .maybeSingle()
-
-          if (tier && tier.id) {
-            const newSold = (tier.sold_count || 0) + 1
-            await supabaseAdmin
-              .from('ticket_tiers')
-              .update({ sold_count: newSold })
-              .eq('id', tier.id)
-          }
-        } catch (e) {
-          logger.error('TICKETS-STATUS', 'Failed to increment sold_count', { requestId: req.requestId, error: e?.message || String(e) })
-        }
-
-        // Update venue_seats from reserved to owned
-        try {
-          await supabaseAdmin
-            .from('venue_seats')
-            .update({ status: 'owned', reserved_until: null })
-            .eq('reserved_by', id)
-            .eq('status', 'reserved')
-
-          const io = req.app.get('io')
-          if (io) {
-            const { data: updatedSeats } = await supabaseAdmin
-              .from('venue_seats')
-              .select('id')
-              .eq('reserved_by', id)
-              .eq('status', 'owned')
-
-            if (updatedSeats) {
-              updatedSeats.forEach(s => {
-                io.to(`event:${ticket.event_id}:seats`).emit('SEAT_UPDATE', {
-                  seatId: s.id,
-                  status: 'owned'
-                })
-              })
-            }
-          }
-        } catch (e) {
-          logger.error('TICKETS-STATUS', 'Failed to update seat status', { requestId: req.requestId, error: e?.message || String(e) })
+      if (existingInvoice) {
+        // If invoice is not yet marked paid and there's no proof, block confirmation
+        const needsProof = existingInvoice.status !== 'paid' && (!existingInvoice.proof_image_url || existingInvoice.proof_image_url === '')
+        const manualTransfer = !existingInvoice.payment_method || existingInvoice.payment_method.toLowerCase().includes('transfer')
+        if (needsProof && manualTransfer) {
+          return res.status(400).json({ error: 'Bukti pembayaran wajib sebelum konfirmasi' })
         }
       }
-    })
-  } catch (err) {
-    if (err.message === 'update_failed') return res.status(500).json({ error: 'Gagal memperbarui status tiket' })
-    logger.error('TICKETS-STATUS', 'Error updating status', { requestId: req.requestId, error: err?.message || String(err) })
-    return res.status(500).json({ error: 'Gagal memperbarui status tiket' })
+    } catch (e) {
+      logger.error('TICKETS-STATUS', 'Failed to validate invoice before confirm', { requestId: req.requestId, ticketId: id, error: e?.message || String(e) })
+      return res.status(500).json({ error: 'Gagal memvalidasi data invoice' })
+    }
+  }
+
+  if (status === 'confirmed') {
+    const { error: confirmError } = await supabaseAdmin.rpc('confirm_ticket_request', { _ticket_id: id })
+    if (confirmError) {
+      logger.error('TICKETS-STATUS', 'Failed to atomically confirm ticket', {
+        requestId: req.requestId,
+        ticketId: id,
+        error: confirmError.message
+      })
+      return res.status(500).json({ error: 'Gagal mengonfirmasi tiket' })
+    }
+  } else {
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from('ticket_requests')
+      .update({ status })
+      .eq('id', id)
+      .eq('status', 'pending')
+
+    if (updateError) {
+      logger.error('TICKETS-STATUS', 'Failed to update ticket status', {
+        requestId: req.requestId,
+        ticketId: id,
+        status,
+        error: updateError.message
+      })
+      return res.status(500).json({ error: 'Gagal memperbarui status tiket' })
+    }
+
+    if (!updated || (Array.isArray(updated) && updated.length === 0)) {
+      return res.status(400).json({ error: 'Tiket sudah diproses sebelumnya' })
+    }
   }
 
   // Handle invoice generation + global purchase ticker when status becomes confirmed
@@ -691,7 +720,10 @@ router.put('/:id/status', requireAuth, async (req, res) => {
           total_amount: price,
           payment_date: new Date().toISOString(),
           payment_method: 'Manual Transfer',
-          status: 'paid'
+          status: 'paid',
+          approved_by: req.user.id,
+          approved_at: new Date().toISOString(),
+          approval_note: 'Auto-generated upon confirmation'
         })
     } catch (invoiceErr) {
       logger.error('TICKETS-INVOICE', 'Failed to create invoice upon confirmation', {
@@ -699,6 +731,30 @@ router.put('/:id/status', requireAuth, async (req, res) => {
         ticketId: id,
         error: invoiceErr.message
       })
+    }
+
+    // Insert admin approval system message into chat thread (for traceability)
+    try {
+      const { data: adminUser } = await supabaseAdmin.auth.admin.getUserById(req.user.id)
+      const adminName = adminUser?.user?.user_metadata?.name || adminUser?.user?.email || 'Admin'
+      const { data: approvalThread } = await supabaseAdmin
+        .from('chat_threads')
+        .select('id')
+        .eq('ticket_request_id', id)
+        .maybeSingle()
+
+      if (approvalThread) {
+        await supabaseAdmin
+          .from('chat_messages')
+          .insert({
+            thread_id: approvalThread.id,
+            sender_id: req.user.id,
+            message_type: 'system',
+            content: `Pembayaran diverifikasi dan disetujui oleh ${adminName}.`
+          })
+      }
+    } catch (e) {
+      logger.warn('TICKETS-INVOICE', 'Failed to insert admin approval message', { requestId: req.requestId, ticketId: id, error: e?.message || String(e) })
     }
 
     const io = req.app.get('io')
@@ -735,6 +791,7 @@ router.put('/:id/status', requireAuth, async (req, res) => {
   }
 
   if (status === 'confirmed') {
+    try { recordEvent('tickets_confirmed') } catch {}
     await createNotification(
       ticket.user_id,
       'ticket_confirmed',
@@ -743,7 +800,9 @@ router.put('/:id/status', requireAuth, async (req, res) => {
       ticket.event_id,
       'event'
     )
+    await logEventRoleActivity(ticket.event_id, req.user.id, 'confirm_ticket', { ticket_request_id: id, status: 'confirmed' })
   } else if (status === 'cancelled') {
+    try { recordEvent('tickets_cancelled') } catch {}
     await createNotification(
       ticket.user_id,
       'ticket_cancelled',
@@ -752,6 +811,7 @@ router.put('/:id/status', requireAuth, async (req, res) => {
       ticket.event_id,
       'event'
     )
+    await logEventRoleActivity(ticket.event_id, req.user.id, 'cancel_ticket', { ticket_request_id: id, status: 'cancelled' })
   }
 
   logger.info('TICKETS-STATUS', 'Ticket status updated', {
@@ -873,6 +933,37 @@ router.patch('/:id/claim', requireAuth, async (req, res) => {
         claimed_by_profile: { name: adminName, email: user?.user?.email || '' }
       })
     }
+
+    // Insert audit log for claim
+    logAudit({ requestId: id, actorId: req.user.id, actorRole: 'admin', action: 'claim_ticket', metadata: { event_id: ticket.event_id } })
+
+    // Ensure chat thread exists and insert a short system message template
+    try {
+      const { data: thread } = await supabaseAdmin
+        .from('chat_threads')
+        .select('id')
+        .eq('ticket_request_id', id)
+        .maybeSingle()
+
+      let threadId = thread?.id
+      if (!threadId) {
+        const { data: newThread } = await supabaseAdmin
+          .from('chat_threads')
+          .insert({ ticket_request_id: id, is_active: true })
+          .select('id')
+          .maybeSingle()
+        threadId = newThread?.id
+      }
+
+      if (threadId) {
+        const sysMessage = `Admin ${adminName} mengambil alih penanganan. Silakan kirim bukti transfer jika belum.`
+        await supabaseAdmin
+          .from('chat_messages')
+          .insert({ thread_id: threadId, sender_id: req.user.id, message_type: 'system', content: sysMessage })
+      }
+    } catch (e) {
+      logger.warn('TICKETS-CLAIM', 'Failed to post claim system message', { requestId: id, error: e?.message || String(e) })
+    }
   } else {
     if (ticket.claimed_by !== req.user.id) {
       return res.status(403).json({ error: 'Bukan claim kamu' })
@@ -886,9 +977,69 @@ router.patch('/:id/claim', requireAuth, async (req, res) => {
     if (io) {
       io.to(`event:${ticket.event_id}:queue`).emit('queue:released', { id })
     }
+
+    // Audit release
+    logAudit({ requestId: id, actorId: req.user.id, actorRole: 'admin', action: 'release_ticket', metadata: { event_id: ticket.event_id } })
   }
 
   res.json({ message: claim ? 'Tiket diambil' : 'Tiket dilepaskan' })
+})
+
+// Simple message transcript (lightweight) for a ticket request
+router.get('/:id/transcript', requireAuth, async (req, res) => {
+  const { id } = req.params
+
+  const { data: messages, error } = await supabaseAdmin
+    .from('chat_messages')
+    .select('id, thread_id, sender_id, message_type, content, created_at')
+    .eq('thread_id', (
+      await supabaseAdmin.from('chat_threads').select('id').eq('ticket_request_id', id).maybeSingle()
+    ).id)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    logger.warn('TRANSCRIPT', 'Failed to fetch transcript', { requestId: id, error: error.message })
+    return res.status(500).json({ error: 'Gagal mengambil transkrip pesan' })
+  }
+
+  // Simplify sender to either 'buyer'/'admin'/'system' when possible
+  const simplified = (messages || []).map(m => ({
+    id: m.id,
+    sender: m.message_type === 'system' ? 'system' : (m.sender_id === req.user.id ? 'you' : 'other'),
+    type: m.message_type,
+    content: m.content,
+    at: m.created_at
+  }))
+
+  res.json({ transcript: simplified })
+})
+
+// Analytics endpoint for event: basic counts and per-tier sold
+router.get('/event/:eventId/analytics', requireAuth, async (req, res) => {
+  const { eventId } = req.params
+  const event = await verifyEventAccess(eventId, req.user.id)
+  if (!event) return res.status(403).json({ error: 'Akses ditolak' })
+
+  try {
+    const [{ data: statusCounts }, { data: perTier }] = await Promise.all([
+      supabaseAdmin.from('ticket_requests').select('status', { count: 'exact', head: false }).eq('event_id', eventId),
+      supabaseAdmin.from('ticket_tiers').select('name, sold_count').eq('event_id', eventId)
+    ])
+
+    // Build status breakdown
+    const { data: statuses } = await supabaseAdmin
+      .from('ticket_requests')
+      .select('status, count', { head: false })
+      .eq('event_id', eventId)
+
+    // Simpler: count by status via SQL aggregate
+    const { data: counts } = await supabaseAdmin.rpc('ticket_status_counts', { _event_id: eventId }).catch(() => ({ data: null }))
+
+    res.json({ tiers: perTier || [], status_counts: counts || {} })
+  } catch (e) {
+    logger.error('ANALYTICS', 'Failed to compute analytics', { eventId, error: e?.message || String(e) })
+    res.status(500).json({ error: 'Gagal menghitung analytics' })
+  }
 })
 
 router.patch('/:id/validate', requireAuth, async (req, res) => {
@@ -930,6 +1081,27 @@ router.patch('/:id/validate', requireAuth, async (req, res) => {
 
   if (ticket.status !== 'confirmed') {
     return res.status(400).json({ error: 'Tiket belum dikonfirmasi' })
+  }
+
+  // Enforce attendance only during event runtime (configurable via ENV EVENT_DURATION_HOURS)
+  try {
+    const { data: ev } = await supabaseAdmin
+      .from('events')
+      .select('date')
+      .eq('id', ticket.event_id)
+      .maybeSingle()
+
+    if (ev && ev.date) {
+      const start = new Date(ev.date)
+      const durationHours = parseInt(process.env.EVENT_DURATION_HOURS) || 8
+      const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000)
+      const now = new Date()
+      if (now < start || now > end) {
+        return res.status(400).json({ error: 'Check-in hanya bisa dilakukan saat acara berlangsung' })
+      }
+    }
+  } catch (e) {
+    logger.warn('TICKETS-VALIDATE', 'Failed to verify event time window', { requestId: req.requestId, error: e?.message || String(e) })
   }
 
   if (ticket.is_checked_in) {
@@ -1136,6 +1308,57 @@ router.patch('/:id/cancel-buyer', requireAuth, async (req, res) => {
   res.json({ message: 'Tiket berhasil dibatalkan' })
 })
 
+// Creator can disable a confirmed ticket (special action only available to event creator)
+router.patch('/:id/disable', requireAuth, async (req, res) => {
+  const { id } = req.params
+
+  const { data: ticket, error: fetchError } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !ticket) return res.status(404).json({ error: 'Tiket tidak ditemukan' })
+
+  const { data: ev } = await supabaseAdmin
+    .from('events')
+    .select('creator_id')
+    .eq('id', ticket.event_id)
+    .maybeSingle()
+
+  if (!ev || ev.creator_id !== req.user.id) return res.status(403).json({ error: 'Hanya kreator acara yang dapat menonaktifkan tiket' })
+
+  if (ticket.status !== 'confirmed') return res.status(400).json({ error: 'Hanya tiket yang sudah dikonfirmasi yang dapat dinonaktifkan' })
+
+  const { error: updateError } = await supabaseAdmin
+    .from('ticket_requests')
+    .update({ status: 'cancelled' })
+    .eq('id', id)
+
+  if (updateError) return res.status(500).json({ error: 'Gagal menonaktifkan tiket' })
+
+  // Insert system message and notify buyer
+  const { data: thread } = await supabaseAdmin
+    .from('chat_threads')
+    .select('id')
+    .eq('ticket_request_id', id)
+    .maybeSingle()
+
+  if (thread) {
+    await supabaseAdmin.from('chat_messages').insert({
+      thread_id: thread.id,
+      sender_id: req.user.id,
+      message_type: 'system',
+      content: 'Tiket dinonaktifkan oleh kreator acara.'
+    })
+  }
+
+  const io = req.app.get('io')
+  if (io) io.to(`event:${ticket.event_id}:queue`).emit('queue:status_changed', { id, status: 'cancelled' })
+
+  res.json({ message: 'Tiket berhasil dinonaktifkan' })
+})
+
 // Admin extend deadline
 router.patch('/:id/extend-deadline', requireAuth, async (req, res) => {
   const { id } = req.params
@@ -1198,14 +1421,24 @@ router.put('/:id/proof', requireAuth, async (req, res) => {
   const { id } = req.params
   const { transfer_reference, sender_bank, transfer_amount, proof_image_url } = req.body
 
-  if (!transfer_reference || !transfer_reference.trim()) {
+  const reference = normalizeString(transfer_reference, MAX_REFERENCE_LENGTH)
+  const bankName = normalizeString(sender_bank, MAX_BANK_NAME_LENGTH)
+  const amount = Number(transfer_amount)
+
+  if (!reference) {
     return res.status(400).json({ error: 'Nomor referensi wajib diisi' })
   }
-  if (!sender_bank) {
+  if (!bankName) {
     return res.status(400).json({ error: 'Bank/e-wallet tujuan wajib diisi' })
   }
-  if (!transfer_amount || transfer_amount <= 0) {
+  if (!amount || amount <= 0) {
     return res.status(400).json({ error: 'Jumlah transfer wajib diisi' })
+  }
+  if (!proof_image_url || !proof_image_url.trim()) {
+    return res.status(400).json({ error: 'Bukti transfer (gambar) wajib diunggah' })
+  }
+  if (!isValidCloudinaryUrl(proof_image_url.trim())) {
+    return res.status(400).json({ error: 'URL bukti transfer tidak valid' })
   }
 
   const { data: ticket, error: fetchError } = await supabaseAdmin
@@ -1300,7 +1533,25 @@ router.get('/event/:eventId/invoices', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal mengambil data invoice' })
   }
 
-  res.json({ invoices })
+  // Resolve approved_by UUIDs to user-friendly names when present
+  const approvedIds = [...new Set((invoices || []).map(i => i.approved_by).filter(Boolean))]
+  const approverMap = {}
+  await Promise.all(approvedIds.map(async (uid) => {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(uid)
+      approverMap[uid] = u?.user?.user_metadata?.name || u?.user?.email || ''
+    } catch {
+      approverMap[uid] = ''
+    }
+  }))
+
+  const enriched = (invoices || []).map(inv => ({
+    ...inv,
+    approved_by: inv.approved_by ? (approverMap[inv.approved_by] || inv.approved_by) : '',
+    approval_note: inv.approval_note || ''
+  }))
+
+  res.json({ invoices: enriched })
 })
 
 // Export invoices
@@ -1331,7 +1582,9 @@ router.get('/event/:eventId/export/invoices', requireAuth, async (req, res) => {
       { header: 'Total Bayar (IDR)', key: 'total_amount', width: 20 },
       { header: 'Tanggal Pembayaran', key: 'payment_date', width: 25 },
       { header: 'Metode Pembayaran', key: 'payment_method', width: 20 },
-      { header: 'Status', key: 'status', width: 12 }
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Disetujui Oleh', key: 'approved_by', width: 25 },
+      { header: 'Tanggal Persetujuan', key: 'approved_at', width: 25 }
     ]
 
     invoices.forEach(inv => {
@@ -1344,7 +1597,9 @@ router.get('/event/:eventId/export/invoices', requireAuth, async (req, res) => {
         total_amount: Number(inv.total_amount),
         payment_date: inv.payment_date ? new Date(inv.payment_date).toLocaleString('id-ID') : '',
         payment_method: inv.payment_method,
-        status: inv.status
+        status: inv.status,
+        approved_by: inv.approved_by || '',
+        approved_at: inv.approved_at ? new Date(inv.approved_at).toLocaleString('id-ID') : ''
       })
     })
 
@@ -1353,9 +1608,9 @@ router.get('/event/:eventId/export/invoices', requireAuth, async (req, res) => {
     await workbook.xlsx.write(res)
     res.end()
   } else {
-    let csv = 'No. Invoice,Nama Pembeli,Tipe Tiket,Jumlah,Harga Satuan (IDR),Total Bayar (IDR),Tanggal Pembayaran,Metode Pembayaran,Status\n'
+    let csv = 'No. Invoice,Nama Pembeli,Tipe Tiket,Jumlah,Harga Satuan (IDR),Total Bayar (IDR),Tanggal Pembayaran,Metode Pembayaran,Status,Disetujui Oleh,Tanggal Persetujuan\n'
     invoices.forEach(inv => {
-      csv += `"${inv.invoice_number}","${inv.buyer_name}","${inv.ticket_type}",${inv.quantity},${inv.unit_price},${inv.total_amount},"${inv.payment_date ? new Date(inv.payment_date).toLocaleString('id-ID') : ''}","${inv.payment_method}","${inv.status}"\n`
+      csv += `"${inv.invoice_number}","${inv.buyer_name}","${inv.ticket_type}",${inv.quantity},${inv.unit_price},${inv.total_amount},"${inv.payment_date ? new Date(inv.payment_date).toLocaleString('id-ID') : ''}","${inv.payment_method}","${inv.status}","${inv.approved_by || ''}","${inv.approved_at ? new Date(inv.approved_at).toLocaleString('id-ID') : ''}"\n`
     })
     res.setHeader('Content-Type', 'text/csv')
     res.setHeader('Content-Disposition', `attachment; filename=invoices-${eventId}.csv`)
@@ -1434,3 +1689,89 @@ router.get('/event/:eventId/export/attendance', requireAuth, async (req, res) =>
 })
 
 export default router
+
+// Admin: approve invoice (mark as paid) and record approver metadata
+// This is separated from ticket confirmation to allow manual review of proofs.
+router.patch('/:id/approve-invoice', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const { note, mark_confirmed } = req.body // optional approval note, optional also confirm ticket
+
+  const { data: ticket, error: ticketErr } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('*, events!inner(creator_id)')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (ticketErr || !ticket) return res.status(404).json({ error: 'Tiket tidak ditemukan' })
+
+  // verify admin access
+  const event = await verifyEventAccess(ticket.event_id, req.user.id)
+  if (!event) return res.status(403).json({ error: 'Akses ditolak' })
+
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('*')
+    .eq('ticket_request_id', id)
+    .maybeSingle()
+
+  if (!invoice) return res.status(404).json({ error: 'Invoice tidak ditemukan untuk tiket ini' })
+
+  // mark as paid and record approver
+  const approvedAt = new Date().toISOString()
+  const { error: updateErr } = await supabaseAdmin
+    .from('invoices')
+    .update({ status: 'paid', approved_by: req.user.id, approved_at: approvedAt, approval_note: note || 'Diverifikasi oleh admin' })
+    .eq('id', invoice.id)
+
+  if (updateErr) {
+    logger.error('INVOICES-APPROVE', 'Failed to mark invoice paid', { requestId: req.requestId, invoiceId: invoice.id, error: updateErr.message })
+    return res.status(500).json({ error: 'Gagal memproses persetujuan invoice' })
+  }
+
+  // insert chat message for audit trail
+  try {
+    const { data: thread } = await supabaseAdmin
+      .from('chat_threads')
+      .select('id')
+      .eq('ticket_request_id', id)
+      .maybeSingle()
+
+    if (thread) {
+      await supabaseAdmin.from('chat_messages').insert({
+        thread_id: thread.id,
+        sender_id: req.user.id,
+        message_type: 'system',
+        content: `Pembayaran diverifikasi dan disetujui oleh ${req.user.id}. ${note || ''}`
+      })
+    }
+  } catch (e) {
+    logger.warn('INVOICES-APPROVE', 'Failed to insert approval chat message', { requestId: req.requestId, error: e?.message || String(e) })
+  }
+
+  // Optionally confirm the ticket as well
+  if (mark_confirmed) {
+    try {
+      await supabaseAdmin
+        .from('ticket_requests')
+        .update({ status: 'confirmed' })
+        .eq('id', id)
+
+      // emit realtime and notif
+      const io = req.app.get('io')
+      if (io) io.to(`event:${ticket.event_id}:queue`).emit('queue:status_changed', { id, status: 'confirmed' })
+
+      await createNotification(
+        ticket.user_id,
+        'ticket_confirmed',
+        'Tiket Dikonfirmasi',
+        `Tiket ${ticket.tier_name} untuk ${ticket.events.title} telah dikonfirmasi`,
+        ticket.event_id,
+        'event'
+      )
+    } catch (e) {
+      logger.error('INVOICES-APPROVE', 'Failed to confirm ticket after approval', { requestId: req.requestId, ticketId: id, error: e?.message || String(e) })
+    }
+  }
+
+  res.json({ message: 'Invoice disetujui' })
+})

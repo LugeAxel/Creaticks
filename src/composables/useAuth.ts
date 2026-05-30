@@ -1,5 +1,6 @@
 import { ref, onMounted } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { setSocketAuthToken } from '@/lib/socket'
 import type { User, Session, AuthError } from '@supabase/supabase-js'
 import { useToast } from '@/composables/useToast'
 
@@ -13,6 +14,7 @@ export function useAuth() {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       session.value = s
       user.value = s?.user ?? null
+      setSocketAuthToken(s?.access_token ?? null)
       loading.value = false
     })
 
@@ -20,6 +22,7 @@ export function useAuth() {
       const prevSession = session.value
       session.value = s
       user.value = s?.user ?? null
+      setSocketAuthToken(s?.access_token ?? null)
 
       if (event === 'SIGNED_OUT' && prevSession && !isSigningOut) {
         if (window.location.pathname !== '/login') {

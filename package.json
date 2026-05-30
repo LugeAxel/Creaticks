@@ -9,7 +9,11 @@
     "dev:be": "node --watch backend/server.js",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "audit": "npm audit --audit-level=low",
+    "scan": "npm audit || true",
+    "test:smoke": "node backend/scripts/smoke_test.js",
+    "test": "npm run test:smoke"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

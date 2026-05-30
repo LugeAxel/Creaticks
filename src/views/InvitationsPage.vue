@@ -68,7 +68,7 @@ const roleLabel = (role: string) => {
   const labels: Record<string, string> = {
     attendance: 'Attendance',
     support: 'Support',
-    secretary: 'Secretary'
+    accountant: 'Accountant'
   }
   return labels[role] || role
 }
@@ -77,7 +77,7 @@ const roleIcon = (role: string) => {
   const icons: Record<string, string> = {
     attendance: 'qr_code_scanner',
     support: 'support_agent',
-    secretary: 'description'
+    accountant: 'receipt'
   }
   return icons[role] || 'badge'
 }

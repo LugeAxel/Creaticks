@@ -1,12 +1,26 @@
 import { io, Socket } from 'socket.io-client'
 
 let socket: Socket | null = null
+let authToken: string | null = null
 const joinedRooms = new Set<string>()
+
+export function setSocketAuthToken(token: string | null) {
+  authToken = token
+  if (!socket) return
+  socket.auth = { token }
+  if (socket.connected) {
+    socket.disconnect()
+  }
+  socket.connect()
+}
 
 export function getSocket() {
   if (socket) return socket
   const url = import.meta.env.VITE_API_URL
-  socket = io(url, { autoConnect: true })
+  socket = io(url, {
+    autoConnect: false,
+    auth: { token: authToken }
+  })
 
   socket.on('connect_error', (err) => {
     console.warn('Socket connect error', err?.message || err)
@@ -19,6 +33,7 @@ export function getSocket() {
     })
   })
 
+  socket.connect()
   return socket
 }
 

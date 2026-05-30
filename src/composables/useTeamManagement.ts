@@ -42,19 +42,19 @@ supabase.auth.getUser().then(({ data }) => {
 const ROLES_LABELS: Record<string, string> = {
   attendance: 'Attendance',
   support: 'Support',
-  secretary: 'Secretary'
+  accountant: 'Accountant'
 }
 
 const ROLES_ICONS: Record<string, string> = {
   attendance: 'qr_code_scanner',
   support: 'support_agent',
-  secretary: 'description'
+  accountant: 'receipt'
 }
 
 const ROLES_COLORS: Record<string, string> = {
   attendance: 'bg-green-100 text-green-700',
   support: 'bg-blue-100 text-blue-700',
-  secretary: 'bg-purple-100 text-purple-700'
+  accountant: 'bg-purple-100 text-purple-700'
 }
 
 async function buildHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {

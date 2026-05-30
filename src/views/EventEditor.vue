@@ -1044,10 +1044,10 @@ const removeInvitedAdmin = (idx: number) => {
                   <span class="text-sm font-semibold text-text">Support</span>
                 </label>
                 <label class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all"
-                  :class="selectedRoles.includes('secretary') ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'">
-                  <input type="checkbox" :checked="selectedRoles.includes('secretary')" class="w-4 h-4 text-primary rounded focus:ring-primary" @change="toggleRole('secretary')" />
-                  <span class="material-symbols-outlined text-lg text-primary">description</span>
-                  <span class="text-sm font-semibold text-text">Secretary</span>
+                  :class="selectedRoles.includes('accountant') ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'">
+                  <input type="checkbox" :checked="selectedRoles.includes('accountant')" class="w-4 h-4 text-primary rounded focus:ring-primary" @change="toggleRole('accountant')" />
+                  <span class="material-symbols-outlined text-lg text-primary">receipt</span>
+                  <span class="text-sm font-semibold text-text">Accountant</span>
                 </label>
               </div>
               <BaseButton variant="accent" size="sm" class="mt-3" :disabled="!selectedUserId || selectedRoles.length === 0" @click="addInvitedAdmin">

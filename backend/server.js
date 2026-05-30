@@ -33,7 +33,7 @@ const main = async () => {
   ])
 
   const app = express()
-  const PORT = process.env.PORT
+  const PORT = process.env.PORT || 2301
 
   app.set('trust proxy', 1)
   app.use(helmet())
@@ -41,6 +41,11 @@ const main = async () => {
   app.use(express.json({ limit: '10mb' }))
   app.use(logger.request)
   app.use(logger.response)
+
+  // Simple metrics middleware
+  const { metricsMiddleware, metricsHandler } = await import('./monitoring/metrics.js')
+  app.use(metricsMiddleware)
+  app.get('/api/metrics', metricsHandler)
 
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -103,21 +108,105 @@ const main = async () => {
 
   app.set('io', io)
 
-  io.on('connection', (socket) => {
-    logger.debug('SOCKET', 'Client connected', { socketId: socket.id })
+  const authorizeSocket = async (socket) => {
+    const authToken = socket.handshake.auth?.token ||
+      (socket.handshake.headers?.authorization || '').toString().startsWith('Bearer ')
+        ? socket.handshake.headers.authorization.split(' ')[1]
+        : null
 
-    socket.on('join:room', ({ room }) => {
+    if (!authToken) {
+      return false
+    }
+
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(authToken)
+    if (error || !user) {
+      return false
+    }
+
+    socket.data.user = user
+    return true
+  }
+
+  const userHasRoomAccess = async (room, user) => {
+    const roomMatch = /^event:([0-9a-fA-F-]+):(queue|admins|attendance|seats)$/.exec(room)
+    if (!roomMatch) return false
+
+    const eventId = roomMatch[1]
+    const channel = roomMatch[2]
+
+    const { data: event } = await supabaseAdmin
+      .from('events')
+      .select('creator_id, status')
+      .eq('id', eventId)
+      .maybeSingle()
+
+    if (!event) return false
+    const isCreator = event.creator_id === user.id
+
+    if (isCreator) return true
+
+    const { data: role } = await supabaseAdmin
+      .from('event_roles')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('user_id', user.id)
+      .eq('status', 'accepted')
+      .maybeSingle()
+
+    const isAdmin = !!role
+    if (['queue', 'admins', 'attendance'].includes(channel)) {
+      return isAdmin
+    }
+
+    if (channel === 'seats') {
+      if (isAdmin || event.status === 'published') return true
+      const { data: ticket } = await supabaseAdmin
+        .from('ticket_requests')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      return !!ticket
+    }
+
+    return false
+  }
+
+  io.use(async (socket, next) => {
+    try {
+      const authorized = await authorizeSocket(socket)
+      if (!authorized) {
+        return next(new Error('Unauthorized'))
+      }
+      next()
+    } catch (e) {
+      logger.warn('SOCKET', 'Socket auth failure', { error: e?.message || String(e) })
+      next(new Error('Unauthorized'))
+    }
+  })
+
+  io.on('connection', (socket) => {
+    logger.debug('SOCKET', 'Client connected', { socketId: socket.id, userId: socket.data.user?.id })
+
+    socket.on('join:room', async ({ room }) => {
+      if (!room || typeof room !== 'string') return
+      const allowed = await userHasRoomAccess(room, socket.data.user)
+      if (!allowed) {
+        logger.warn('SOCKET', 'Unauthorized room join attempt', { socketId: socket.id, room, userId: socket.data.user?.id })
+        return
+      }
       socket.join(room)
-      logger.debug('SOCKET', `Client joined room: ${room}`, { socketId: socket.id })
+      logger.debug('SOCKET', `Client joined room: ${room}`, { socketId: socket.id, userId: socket.data.user?.id })
     })
 
     socket.on('leave:room', ({ room }) => {
+      if (!room || typeof room !== 'string') return
       socket.leave(room)
-      logger.debug('SOCKET', `Client left room: ${room}`, { socketId: socket.id })
+      logger.debug('SOCKET', `Client left room: ${room}`, { socketId: socket.id, userId: socket.data.user?.id })
     })
 
     socket.on('disconnect', () => {
-      logger.debug('SOCKET', 'Client disconnected', { socketId: socket.id })
+      logger.debug('SOCKET', 'Client disconnected', { socketId: socket.id, userId: socket.data.user?.id })
     })
   })
 
@@ -237,10 +326,79 @@ const main = async () => {
         }
       }
     }
+
+    // 3. Remove cancelled tickets from queue after 20 minutes and post a system message once
+    try {
+      const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString()
+      const { data: cancelledOld, error: cancelledErr } = await supabaseAdmin
+        .from('ticket_requests')
+        .select('id, event_id, user_id')
+        .eq('status', 'cancelled')
+        .lt('updated_at', twentyMinsAgo)
+
+      if (cancelledErr) {
+        logger.error('CRON-QUEUE-CLEAN', 'Failed to fetch old cancelled requests', { error: cancelledErr.message })
+      } else if (cancelledOld && cancelledOld.length > 0) {
+        for (const req of cancelledOld) {
+          try {
+            const { data: thread } = await supabaseAdmin
+              .from('chat_threads')
+              .select('id')
+              .eq('ticket_request_id', req.id)
+              .maybeSingle()
+
+            // If thread exists, only insert one system message marker to avoid reprocessing
+            let alreadyPosted = false
+            if (thread) {
+              const { data: existingMsg, error: msgErr } = await supabaseAdmin
+                .from('chat_messages')
+                .select('id')
+                .eq('thread_id', thread.id)
+                .ilike('content', '%dihapus dari antrian%')
+                .limit(1)
+                .maybeSingle()
+
+              if (!msgErr && existingMsg) alreadyPosted = true
+            }
+
+            if (!alreadyPosted) {
+              if (thread) {
+                await supabaseAdmin
+                  .from('chat_messages')
+                  .insert({
+                    thread_id: thread.id,
+                    sender_id: req.user_id,
+                    message_type: 'system',
+                    content: 'Tiket dihapus dari antrian setelah 20 menit pembatalan.'
+                  })
+
+                await supabaseAdmin
+                  .from('chat_threads')
+                  .update({ is_active: false })
+                  .eq('id', thread.id)
+              }
+
+              // Notify realtime clients to remove from queue
+              io.to(`event:${req.event_id}:queue`).emit('queue:released', { id: req.id })
+              logger.info('CRON-QUEUE-CLEAN', `Removed cancelled request ${req.id} from queue after 20 minutes`)
+            }
+          } catch (e) {
+            logger.error('CRON-QUEUE-CLEAN', `Failed processing cancelled request ${req.id}`, { error: e?.message || String(e) })
+          }
+        }
+      }
+    } catch (e) {
+      logger.error('CRON-QUEUE-CLEAN', 'Unexpected error', { error: e?.message || String(e) })
+    }
   })
 
   server.listen(PORT, () => {
     logger.info('SERVER', `Creaticks backend running on port ${PORT}`)
+  })
+
+  server.on('error', (err) => {
+    logger.error('SERVER', 'Server error', { error: err?.message || String(err) })
+    process.exit(1)
   })
 }
 

@@ -1,5 +1,5 @@
 -- Event roles: per-event admin assignments
--- An admin can have multiple roles (attendance, support, secretary)
+-- An admin can have multiple roles (attendance, support, accountant)
 -- Invitations must be accepted by the user before taking effect
 
 CREATE TABLE IF NOT EXISTS event_roles (

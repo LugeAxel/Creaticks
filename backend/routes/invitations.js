@@ -6,7 +6,7 @@ import { createNotification } from './notifications.js'
 
 const router = Router()
 
-const VALID_ROLES = ['attendance', 'support', 'secretary']
+const VALID_ROLES = ['attendance', 'support', 'accountant']
 
 function logActivity(roleId, action, performedBy, metadata = {}) {
   return supabaseAdmin

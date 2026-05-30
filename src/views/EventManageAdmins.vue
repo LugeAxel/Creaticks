@@ -1,25 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/composables/useAuth'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useTeamManagement } from '@/composables/useTeamManagement'
-import SkeletonPage from '@/components/shared/SkeletonPage.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 
-const { getAuthHeaders } = useAuth()
+const route = useRoute()
+const eventId = route.params.eventId as string
+
 const {
   searchResults, searchUsers, inviteUser,
   getEventAdmins, updateAdminRoles, removeAdmin,
   ROLES_LABELS, ROLES_ICONS, ROLES_COLORS
 } = useTeamManagement()
-
-interface Event {
-  id: string
-  title: string
-  date: string
-  status: string
-}
 
 interface RoleEntry {
   id: string
@@ -56,8 +48,6 @@ interface ActivityEntry {
   } | null
 }
 
-const events = ref<Event[]>([])
-const selectedEventId = ref('')
 const roles = ref<RoleEntry[]>([])
 const activity = ref<ActivityEntry[]>([])
 const loading = ref(false)
@@ -74,11 +64,6 @@ const expandedAdminId = ref<string | null>(null)
 const editingRoleId = ref<string | null>(null)
 const editingRoleValues = ref<Record<string, string[]>>({})
 const updatingRoleId = ref<string | null>(null)
-
-const filteredActivity = computed(() => {
-  if (!expandedAdminId.value) return activity.value
-  return activity.value.filter(a => a.event_role_id === expandedAdminId.value)
-})
 
 const activityActionLabel = (action: string) => {
   const labels: Record<string, string> = {
@@ -117,18 +102,6 @@ const formatDateTime = (dateStr: string) => {
   })
 }
 
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('id-ID', {
-    day: 'numeric', month: 'short', year: 'numeric'
-  })
-}
-
-watch(inviteSearch, (val) => {
-  if (val.trim().length >= 2) {
-    searchUsers(val)
-  }
-})
-
 const toggleRole = (role: string) => {
   if (selectedRoles.value.includes(role)) {
     selectedRoles.value = selectedRoles.value.filter(r => r !== role)
@@ -153,15 +126,15 @@ const selectUser = (id: string, name: string, email: string) => {
 }
 
 const handleInvite = async () => {
-  if (!selectedEventId.value || !selectedUserId.value || selectedRoles.value.length === 0) {
-    inviteError.value = 'Pilih acara, user, dan minimal satu role'
+  if (!selectedUserId.value || selectedRoles.value.length === 0) {
+    inviteError.value = 'Pilih user dan minimal satu role'
     return
   }
 
   inviteLoading.value = true
   inviteError.value = ''
 
-  const result = await inviteUser(selectedEventId.value, selectedUserId.value, selectedRoles.value)
+  const result = await inviteUser(eventId, selectedUserId.value, selectedRoles.value)
 
   if (result.error) {
     inviteError.value = result.error
@@ -174,26 +147,9 @@ const handleInvite = async () => {
   await loadEventData()
 }
 
-const loadEvents = async () => {
-  try {
-    const token = (await supabase.auth.getSession()).data.session?.access_token
-    const res = await fetch('/api/events', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    const data = await res.json()
-    events.value = data.events || []
-    if (events.value.length > 0 && !selectedEventId.value) {
-      selectedEventId.value = events.value[0].id
-    }
-  } catch {
-    events.value = []
-  }
-}
-
 const loadEventData = async () => {
-  if (!selectedEventId.value) return
   loading.value = true
-  const result = await getEventAdmins(selectedEventId.value)
+  const result = await getEventAdmins(eventId)
   roles.value = result.roles as RoleEntry[]
   activity.value = result.activity as ActivityEntry[]
   loading.value = false
@@ -202,7 +158,7 @@ const loadEventData = async () => {
 const removeDialogId = ref<string | null>(null)
 const removeDialogLoading = ref(false)
 
-const handleRemoveAdmin = async (id: string) => {
+const handleRemoveAdmin = (id: string) => {
   removeDialogId.value = id
 }
 
@@ -256,131 +212,125 @@ const toggleExpand = (id: string) => {
 }
 
 onMounted(async () => {
-  await loadEvents()
-  if (events.value.length > 0) {
-    selectedEventId.value = events.value[0].id
-    await loadEventData()
-  }
-})
-
-watch(selectedEventId, () => {
-  loadEventData()
+  await loadEventData()
 })
 </script>
 
 <template>
-  <AppLayout title="Kelola Tim">
-    <div class="max-w-5xl mx-auto px-6 py-8">
-
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 class="text-2xl font-heading font-bold text-text-heading">Kelola Tim</h1>
-          <p class="text-sm text-text-muted mt-1">Atur akses dan peran admin di acara Anda.</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <select
-            v-if="events.length > 1"
-            v-model="selectedEventId"
-            class="text-sm bg-surface-card border border-border rounded-xl px-4 py-2.5 text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-          >
-            <option v-for="ev in events" :key="ev.id" :value="ev.id">
-              {{ ev.title }}
-            </option>
-          </select>
-          <button
-            class="bg-primary text-on-primary rounded-full px-5 py-2.5 flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all text-sm font-semibold cursor-pointer shadow-sm"
-            @click="openInviteModal"
-          >
-            <span class="material-symbols-outlined text-[18px]">add</span>
-            <span>Undang Admin</span>
-          </button>
-        </div>
+  <div class="p-4 md:p-6 max-w-screen-lg mx-auto">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-xl font-heading font-bold text-text-heading">Manajemen Admin</h1>
+        <p class="text-sm text-text-muted mt-1">Atur akses dan peran admin di acara ini.</p>
       </div>
+      <button
+        class="bg-primary text-on-primary rounded-full px-5 py-2.5 flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all text-sm font-semibold cursor-pointer shadow-sm"
+        @click="openInviteModal"
+      >
+        <span class="material-symbols-outlined text-[18px]">add</span>
+        <span>Undang Admin</span>
+      </button>
+    </div>
 
-      <SkeletonPage v-if="loading" type="admin-list" />
+    <div v-if="loading && roles.length === 0" class="flex items-center justify-center py-16">
+      <span class="material-symbols-outlined text-3xl text-text-muted animate-spin">sync</span>
+    </div>
 
-      <div v-else-if="roles.length === 0" class="text-center py-16 text-text-muted">
-        <span class="material-symbols-outlined text-5xl mb-4">group_off</span>
-        <p class="text-lg font-semibold text-text-heading">Belum ada admin</p>
-        <p class="text-sm mt-1">Undang admin pertama untuk membantu mengelola acara.</p>
-      </div>
+    <div v-else-if="!loading && roles.length === 0" class="text-center py-20 text-text-muted">
+      <span class="material-symbols-outlined text-5xl mb-4">group_off</span>
+      <p class="text-lg font-semibold text-text-heading">Belum ada admin</p>
+      <p class="text-sm mt-1">Undang admin pertama untuk membantu mengelola acara.</p>
+    </div>
 
-      <div v-else class="flex flex-col gap-4">
-        <div
-          v-for="role in roles"
-          :key="role.id"
-          class="bg-surface-card rounded-xl border border-border/50 overflow-hidden transition-shadow hover:shadow-sm"
-        >
-          <div class="p-5">
-            <div class="flex items-start justify-between gap-4">
-              <div class="flex items-center gap-4 min-w-0">
-                <div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-text-muted shrink-0 overflow-hidden">
-                  <img v-if="role.user?.avatar_url" :src="role.user.avatar_url" class="w-full h-full object-cover" />
-                  <span v-else class="material-symbols-outlined text-[20px]">person</span>
-                </div>
-                <div class="min-w-0">
-                  <p class="text-sm font-semibold text-text-heading truncate">{{ role.user?.name || 'Unknown' }}</p>
-                  <p class="text-xs text-text-muted truncate">{{ role.user?.email || '' }}</p>
-                  <p v-if="role.invited_by_user" class="text-xs text-text-muted mt-0.5">
-                    Diundang oleh {{ role.invited_by_user.name }}
-                  </p>
-                </div>
+    <div v-else class="flex flex-col gap-4">
+      <div
+        v-for="role in roles"
+        :key="role.id"
+        class="bg-surface-card rounded-xl border border-border/50 overflow-hidden transition-shadow hover:shadow-sm"
+      >
+        <div class="p-5">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-center gap-4 min-w-0">
+              <div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-text-muted shrink-0 overflow-hidden">
+                <img v-if="role.user?.avatar_url" :src="role.user.avatar_url" class="w-full h-full object-cover" />
+                <span v-else class="material-symbols-outlined text-[20px]">person</span>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <span
-                  class="text-xs font-semibold px-2.5 py-1 rounded-full"
-                  :class="role.status === 'accepted' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'"
-                >
-                  {{ role.status === 'accepted' ? 'Aktif' : 'Menunggu' }}
-                </span>
-                <button
-                  class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error/10 text-text-muted hover:text-error transition-colors cursor-pointer"
-                  @click="handleRemoveAdmin(role.id)"
-                  title="Hapus admin"
-                >
-                  <span class="material-symbols-outlined text-[18px]">remove_circle</span>
-                </button>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-text-heading truncate">{{ role.user?.name || 'Unknown' }}</p>
+                <p class="text-xs text-text-muted truncate">{{ role.user?.email || '' }}</p>
+                <p v-if="role.invited_by_user" class="text-xs text-text-muted mt-0.5">
+                  Diundang oleh {{ role.invited_by_user.name }}
+                </p>
               </div>
             </div>
-
-            <div class="flex flex-wrap gap-1.5 mt-3">
-              <template v-if="editingRoleId === role.id">
-                <div class="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-                  <label v-for="roleOption in Object.keys(ROLES_LABELS)" :key="roleOption" class="flex items-center gap-2 rounded-xl border border-border/40 p-3 cursor-pointer">
-                    <input type="checkbox" class="w-4 h-4 text-primary" :checked="getEditingRoleValues(role.id).includes(roleOption)" @change="toggleEditingRoleOption(role.id, roleOption)" />
-                  <span class="text-sm">{{ ROLES_LABELS[roleOption] }}</span>
-                  </label>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-3">
-                  <button class="text-sm font-semibold text-primary" :disabled="updatingRoleId === role.id" @click="handleUpdateRoles(role.id)">
-                    {{ updatingRoleId === role.id ? 'Menyimpan…' : 'Simpan Perubahan' }}
-                  </button>
-                  <button class="text-sm text-text-muted" @click="cancelEditRoles">Batal</button>
-                </div>
-              </template>
-              <template v-else>
-                <span
-                  v-for="r in role.roles"
-                  :key="r"
-                  class="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/5 text-primary border border-primary/10"
-                >
-                  {{ ROLES_LABELS[r] || r }}
-                </span>
-              </template>
-            </div>
-
-            <div class="flex flex-wrap gap-2 mt-4">
-              <button
-                v-if="editingRoleId !== role.id"
-                class="text-xs text-primary font-semibold px-3 py-2 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10"
-                @click="openEditRoles(role)"
+            <div class="flex items-center gap-2 shrink-0">
+              <span
+                class="text-xs font-semibold px-2.5 py-1 rounded-full"
+                :class="role.status === 'accepted' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'"
               >
-                Ubah Role
+                {{ role.status === 'accepted' ? 'Aktif' : 'Menunggu' }}
+              </span>
+              <button
+                class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error/10 text-text-muted hover:text-error transition-colors cursor-pointer"
+                @click="handleRemoveAdmin(role.id)"
+                title="Hapus admin"
+              >
+                <span class="material-symbols-outlined text-[18px]">remove_circle</span>
               </button>
-              <button
-                class="flex items-center gap-1.5 text-xs text-text-muted hover:text-text transition-colors cursor-pointer"
-                @click="toggleExpand(role.id)"
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5 mt-3">
+            <template v-if="editingRoleId === role.id">
+              <div class="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+                <label
+                  v-for="roleOption in Object.keys(ROLES_LABELS)"
+                  :key="roleOption"
+                  class="flex items-center gap-2 rounded-xl border border-border/40 p-3 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    class="w-4 h-4 text-primary"
+                    :checked="getEditingRoleValues(role.id).includes(roleOption)"
+                    @change="toggleEditingRoleOption(role.id, roleOption)"
+                  />
+                  <span class="text-sm">{{ ROLES_LABELS[roleOption] }}</span>
+                </label>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-3">
+                <button
+                  class="text-sm font-semibold text-primary cursor-pointer"
+                  :disabled="updatingRoleId === role.id"
+                  @click="handleUpdateRoles(role.id)"
+                >
+                  {{ updatingRoleId === role.id ? 'Menyimpan…' : 'Simpan Perubahan' }}
+                </button>
+                <button class="text-sm text-text-muted cursor-pointer" @click="cancelEditRoles">Batal</button>
+              </div>
+            </template>
+            <template v-else>
+              <span
+                v-for="r in role.roles"
+                :key="r"
+                class="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/5 text-primary border border-primary/10"
               >
+                {{ ROLES_LABELS[r] || r }}
+              </span>
+            </template>
+          </div>
+
+          <div class="flex flex-wrap gap-2 mt-4">
+            <button
+              v-if="editingRoleId !== role.id"
+              class="text-xs text-primary font-semibold px-3 py-2 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 cursor-pointer"
+              @click="openEditRoles(role)"
+            >
+              Ubah Role
+            </button>
+            <button
+              class="flex items-center gap-1.5 text-xs text-text-muted hover:text-text transition-colors cursor-pointer"
+              @click="toggleExpand(role.id)"
+            >
               <span
                 class="material-symbols-outlined text-[16px] transition-transform duration-200"
                 :class="expandedAdminId === role.id ? 'rotate-90' : ''"
@@ -389,8 +339,8 @@ watch(selectedEventId, () => {
             </button>
           </div>
 
-          <div v-if="expandedAdminId === role.id" class="border-t border-border/30 bg-surface/50">
-            <div class="p-5 space-y-3">
+          <div v-if="expandedAdminId === role.id" class="border-t border-border/30 bg-surface/50 mt-4 -mx-5 -mb-5 px-5">
+            <div class="py-5 space-y-3">
               <div
                 v-for="entry in activity.filter(a => a.event_role_id === role.id)"
                 :key="entry.id"
@@ -417,48 +367,6 @@ watch(selectedEventId, () => {
           </div>
         </div>
       </div>
-      </div>
-
-      <details class="mt-6 bg-surface-card rounded-xl border border-border/50 overflow-hidden">
-        <summary class="flex items-center justify-between p-5 cursor-pointer hover:bg-surface transition-colors select-none">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-text-muted">
-              <span class="material-symbols-outlined">admin_panel_settings</span>
-            </div>
-            <h3 class="text-headline-sm font-heading font-semibold text-text-heading">Role & Izin</h3>
-          </div>
-          <span class="material-symbols-outlined text-text-muted transition-transform duration-300">expand_more</span>
-        </summary>
-        <div class="p-5 pt-0 text-sm text-text-muted border-t border-border/30 bg-surface/50">
-          <p class="mb-4 mt-4">
-            Setiap admin dapat memiliki satu atau lebih peran berikut:
-          </p>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="bg-surface-card rounded-xl border border-border/30 p-4">
-              <div class="flex items-center gap-2 mb-2">
-                <span class="material-symbols-outlined text-[20px] text-primary">qr_code_scanner</span>
-                <span class="text-sm font-semibold text-text-heading">Attendance</span>
-              </div>
-              <p class="text-xs text-text-muted">Akses scan QR dan panel kehadiran untuk memverifikasi tiket masuk acara.</p>
-            </div>
-            <div class="bg-surface-card rounded-xl border border-border/30 p-4">
-              <div class="flex items-center gap-2 mb-2">
-                <span class="material-symbols-outlined text-[20px] text-primary">support_agent</span>
-                <span class="text-sm font-semibold text-text-heading">Support</span>
-              </div>
-              <p class="text-xs text-text-muted">Menangani antrean request, pembelian tiket, dan refund.</p>
-            </div>
-            <div class="bg-surface-card rounded-xl border border-border/30 p-4">
-              <div class="flex items-center gap-2 mb-2">
-                <span class="material-symbols-outlined text-[20px] text-primary">description</span>
-                <span class="text-sm font-semibold text-text-heading">Secretary</span>
-              </div>
-              <p class="text-xs text-text-muted">Mengelola invoice, akuntansi, dan dokumen acara.</p>
-            </div>
-          </div>
-        </div>
-      </details>
-
     </div>
 
     <Teleport to="body">
@@ -466,7 +374,7 @@ watch(selectedEventId, () => {
         <div class="fixed inset-0 bg-black/40" @click="cancelRemove"></div>
         <div class="relative bg-surface-card rounded-2xl w-full max-w-sm p-6 shadow-xl text-center">
           <span class="material-symbols-outlined text-4xl text-error mb-3">warning</span>
-          <h3 class="text-headline-sm font-heading font-semibold text-text-heading mb-2">Hapus Admin</h3>
+          <h3 class="text-lg font-heading font-semibold text-text-heading mb-2">Hapus Admin</h3>
           <p class="text-sm text-text-muted mb-6">Yakin ingin menghapus admin ini dari acara?</p>
           <div class="flex gap-3 justify-center">
             <BaseButton variant="outline" @click="cancelRemove">Batal</BaseButton>
@@ -481,7 +389,7 @@ watch(selectedEventId, () => {
         <div class="fixed inset-0 bg-black/40" @click="showInviteModal = false"></div>
         <div class="relative bg-surface-card rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 shadow-xl">
           <div class="flex items-center justify-between mb-6">
-            <h2 class="text-headline-sm font-heading font-semibold text-text-heading">Undang Admin</h2>
+            <h2 class="text-lg font-heading font-semibold text-text-heading">Undang Admin</h2>
             <button
               class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface transition-colors cursor-pointer"
               @click="showInviteModal = false"
@@ -491,17 +399,6 @@ watch(selectedEventId, () => {
           </div>
 
           <div class="flex flex-col gap-5">
-            <div>
-              <label class="text-sm font-semibold text-text mb-1.5 block">Pilih Acara</label>
-              <select
-                v-model="selectedEventId"
-                class="w-full text-sm bg-surface border border-border rounded-xl px-4 py-2.5 text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-              >
-                <option value="" disabled>Pilih acara</option>
-                <option v-for="ev in events" :key="ev.id" :value="ev.id">{{ ev.title }}</option>
-              </select>
-            </div>
-
             <div>
               <label class="text-sm font-semibold text-text mb-1.5 block">Cari Pengguna</label>
               <input
@@ -541,7 +438,12 @@ watch(selectedEventId, () => {
                   class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all"
                   :class="selectedRoles.includes('attendance') ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'"
                 >
-                  <input type="checkbox" :checked="selectedRoles.includes('attendance')" class="w-4 h-4 text-primary rounded focus:ring-primary" @change="toggleRole('attendance')" />
+                  <input
+                    type="checkbox"
+                    :checked="selectedRoles.includes('attendance')"
+                    class="w-4 h-4 text-primary rounded focus:ring-primary"
+                    @change="toggleRole('attendance')"
+                  />
                   <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-[18px] text-primary">qr_code_scanner</span>
                     <span class="text-sm font-semibold text-text">Attendance</span>
@@ -552,7 +454,12 @@ watch(selectedEventId, () => {
                   class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all"
                   :class="selectedRoles.includes('support') ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'"
                 >
-                  <input type="checkbox" :checked="selectedRoles.includes('support')" class="w-4 h-4 text-primary rounded focus:ring-primary" @change="toggleRole('support')" />
+                  <input
+                    type="checkbox"
+                    :checked="selectedRoles.includes('support')"
+                    class="w-4 h-4 text-primary rounded focus:ring-primary"
+                    @change="toggleRole('support')"
+                  />
                   <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-[18px] text-primary">support_agent</span>
                     <span class="text-sm font-semibold text-text">Support</span>
@@ -563,7 +470,12 @@ watch(selectedEventId, () => {
                   class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all"
                   :class="selectedRoles.includes('accountant') ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'"
                 >
-                  <input type="checkbox" :checked="selectedRoles.includes('accountant')" class="w-4 h-4 text-primary rounded focus:ring-primary" @change="toggleRole('accountant')" />
+                  <input
+                    type="checkbox"
+                    :checked="selectedRoles.includes('accountant')"
+                    class="w-4 h-4 text-primary rounded focus:ring-primary"
+                    @change="toggleRole('accountant')"
+                  />
                   <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-[18px] text-primary">receipt</span>
                     <span class="text-sm font-semibold text-text">Accountant</span>
@@ -575,13 +487,12 @@ watch(selectedEventId, () => {
 
             <p v-if="inviteError" class="text-sm text-error">{{ inviteError }}</p>
 
-            <BaseButton variant="primary" fullWidth :loading="inviteLoading" :disabled="!selectedEventId || !selectedUserId || selectedRoles.length === 0" @click="handleInvite">
+            <BaseButton variant="primary" fullWidth :loading="inviteLoading" :disabled="!selectedUserId || selectedRoles.length === 0" @click="handleInvite">
               Kirim Undangan
             </BaseButton>
           </div>
         </div>
       </div>
     </Teleport>
-
-  </AppLayout>
+  </div>
 </template>

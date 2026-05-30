@@ -217,9 +217,9 @@ async function saveDesign() {
 </script>
 
 <template>
-  <div class="flex h-full" :style="previewStyle">
+  <div class="flex flex-col lg:flex-row min-h-0" :style="previewStyle">
     <!-- Left Controls Panel -->
-    <aside class="w-[280px] shrink-0 bg-[#16162a] border-r border-white/10 overflow-y-auto p-5 space-y-6">
+    <aside class="w-full lg:w-[280px] shrink-0 bg-[#16162a] lg:border-r border-white/10 overflow-y-auto p-5 space-y-6 lg:sticky lg:top-0 lg:max-h-screen">
       <!-- Layout Picker -->
       <div>
         <div class="section-label">Layout Style</div>
@@ -360,7 +360,7 @@ async function saveDesign() {
     </aside>
 
     <!-- Right Preview Area -->
-    <main class="flex-1 preview-area">
+    <main class="flex-1 preview-area min-h-[300px]">
       <SkeletonPage v-if="initLoading" type="editor" />
 
       <template v-else>
@@ -602,6 +602,9 @@ async function saveDesign() {
     radial-gradient(ellipse at 20% 20%, rgba(108,99,255,0.06) 0%, transparent 60%),
     radial-gradient(ellipse at 80% 80%, rgba(255,101,132,0.04) 0%, transparent 60%);
 }
+@media (max-width: 1023px) {
+  .preview-area { padding: 24px 16px; }
+}
 .preview-hint { font-size: 11px; color: #7070a0; letter-spacing: 2px; text-transform: uppercase; font-family: 'Space Mono', monospace; }
 
 /* ══════════════════════════════════════
@@ -614,7 +617,7 @@ async function saveDesign() {
 
 /* ── LAYOUT A: Classic ── */
 .ticket-classic {
-  width: 360px;
+  width: 100%; max-width: 360px;
   background: var(--tk-bg, #1a1a2e);
   border-radius: 20px;
   overflow: hidden;
@@ -677,7 +680,7 @@ async function saveDesign() {
 
 /* ── LAYOUT B: Split ── */
 .ticket-split {
-  width: 480px;
+  width: 100%; max-width: 480px;
   background: var(--tk-bg, #1a1a2e);
   border-radius: 20px;
   overflow: hidden;
@@ -725,7 +728,7 @@ async function saveDesign() {
 
 /* ── LAYOUT C: Minimal ── */
 .ticket-minimal {
-  width: 360px;
+  width: 100%; max-width: 360px;
   background: var(--tk-bg, #1a1a2e);
   border-radius: 20px;
   overflow: hidden;

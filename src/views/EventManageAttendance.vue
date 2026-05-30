@@ -196,7 +196,30 @@ onUnmounted(() => {
           <p class="text-sm text-text-muted">Tidak ada peserta ditemukan</p>
         </div>
 
-        <div v-else class="overflow-x-auto">
+        <div class="md:hidden space-y-2">
+          <div
+            v-for="ticket in filteredTickets"
+            :key="ticket.id"
+            class="flex items-center gap-3 p-3 rounded-xl border border-border/30 bg-surface-card"
+          >
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-text-heading truncate">{{ ticket.profiles?.name || 'Unknown' }}</p>
+              <p class="text-xs text-text-muted truncate">{{ ticket.profiles?.email || '' }}</p>
+              <div class="flex items-center gap-2 mt-1.5">
+                <span class="text-[11px] text-text-muted bg-surface px-1.5 py-0.5 rounded">{{ ticket.tier_name }}</span>
+                <span
+                  class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                  :class="ticket.is_checked_in ? 'bg-teal-500/10 text-teal-600' : 'bg-amber-500/10 text-amber-600'"
+                >{{ ticket.is_checked_in ? 'Hadir' : 'Belum' }}</span>
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="text-[11px] text-text-muted">{{ ticket.checked_in_at ? formatTime(ticket.checked_in_at) : '-' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-xs text-text-muted border-b border-border/50">
