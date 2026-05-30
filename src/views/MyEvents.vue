@@ -6,32 +6,14 @@ import { useAuth } from '@/composables/useAuth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BackButton from '@/components/shared/BackButton.vue'
+import EventCard from '@/components/shared/EventCard.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const router = useRouter()
 const { user } = useAuth()
 const { myEvents, loading, fetchMyEvents } = useAdminEvents()
 
 const isCreator = computed(() => user.value?.user_metadata?.role === 'creator')
-
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('id-ID', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  })
-}
-
-const roleLabel = (role: string) => role === 'creator' ? 'Kreator' : 'Admin'
-
-const roleBadgeClass = (role: string) => {
-  return role === 'creator'
-    ? 'bg-primary/10 text-primary'
-    : 'bg-teal-500/10 text-teal-600'
-}
-
-const cardHoverClass = (role: string) => {
-  return role === 'creator'
-    ? 'hover:border-primary hover:shadow-[0_0_20px_rgba(108,99,255,0.12)]'
-    : 'hover:border-teal-500 hover:shadow-[0_0_20px_rgba(67,198,172,0.12)]'
-}
 
 onMounted(() => {
   fetchMyEvents()
@@ -62,9 +44,7 @@ onMounted(() => {
           </BaseButton>
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-20">
-          <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-        </div>
+        <SkeletonPage v-if="loading" type="list" />
 
         <div v-else-if="myEvents.length === 0" class="text-center py-20">
           <span class="material-symbols-outlined text-5xl text-text-muted mb-4">event_busy</span>
@@ -78,60 +58,13 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-else class="grid gap-4 md:grid-cols-2">
-          <div
+        <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <EventCard
             v-for="event in myEvents"
             :key="event.id"
-            class="bg-surface-card rounded-2xl border border-border/50 overflow-hidden shadow-sm transition-all duration-200 cursor-pointer"
-            :class="cardHoverClass(event.userRole)"
-            @click="router.push(`/events/${event.id}/manage`)"
-          >
-            <div class="h-32 bg-surface-variant overflow-hidden">
-              <img
-                v-if="event.banner_url"
-                :src="event.banner_url"
-                :alt="event.title"
-                class="w-full h-full object-cover"
-              />
-              <div v-else class="w-full h-full flex items-center justify-center">
-                <span class="material-symbols-outlined text-4xl text-text-muted">event</span>
-              </div>
-            </div>
-            <div class="p-4">
-              <div class="flex items-start justify-between gap-2 mb-2">
-                <h3 class="font-heading font-bold text-text-heading">{{ event.title }}</h3>
-                <div class="flex items-center gap-2 shrink-0">
-                  <span
-                    class="text-xs font-semibold px-2 py-1 rounded-full"
-                    :class="event.status === 'published' ? 'bg-success/10 text-success' : 'bg-amber-500/10 text-amber-600'"
-                  >{{ event.status === 'published' ? 'Publik' : event.status }}</span>
-                  <span class="material-symbols-outlined text-text-muted text-xl">chevron_right</span>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2 mb-3">
-                <span
-                  class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                  :class="roleBadgeClass(event.userRole)"
-                >{{ roleLabel(event.userRole) }}</span>
-                <span
-                  v-if="event.adminRoles && event.adminRoles.length > 0"
-                  v-for="r in event.adminRoles"
-                  :key="r"
-                  class="text-[10px] text-teal-600 bg-teal-500/5 px-1.5 py-0.5 rounded"
-                >{{ r }}</span>
-              </div>
-
-              <p class="text-xs text-text-muted mb-1">
-                <span class="material-symbols-outlined text-sm align-middle mr-1">calendar_month</span>
-                {{ formatDate(event.date) }}
-              </p>
-              <p v-if="event.location" class="text-xs text-text-muted">
-                <span class="material-symbols-outlined text-sm align-middle mr-1">location_on</span>
-                {{ event.location }}
-              </p>
-            </div>
-          </div>
+            :event="event"
+            :userRole="event.userRole"
+          />
         </div>
       </div>
     </div>

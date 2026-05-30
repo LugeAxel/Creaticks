@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 interface AdminEvent {
   id: string
@@ -55,9 +56,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-20">
-          <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-        </div>
+        <SkeletonPage v-if="loading" type="stats" />
 
         <div v-else-if="events.length === 0" class="text-center py-20">
           <span class="material-symbols-outlined text-5xl text-text-muted mb-4">event_busy</span>

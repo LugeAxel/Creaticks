@@ -11,10 +11,13 @@ export interface MyEvent {
   description: string
   category: string
   visibility: string
-  ticket_tiers: Array<{ id: string; name: string; price: number; quota: number }>
+  event_format: string
+  max_tickets: number
+  ticket_tiers: Array<{ id: string; name: string; price: number; quota: number; sold_count: number; description?: string; color?: string; seat_tier?: string | null }>
   userRole: 'creator' | 'admin'
   adminRoles?: string[]
   creator_id: string
+  created_at: string
 }
 
 const myEvents = ref<MyEvent[]>([])

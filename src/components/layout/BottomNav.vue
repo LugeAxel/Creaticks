@@ -42,8 +42,6 @@ const navItems = computed(() => {
     items.push({ name: 'Buat', icon: 'add_circle', route: '/creator/events/new' })
   }
 
-  items.push({ name: 'Profil', icon: 'person', route: '/pengaturan' })
-
   return items
 })
 

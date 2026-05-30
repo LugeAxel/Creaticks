@@ -1,9 +1,21 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import EventCard from '@/components/shared/EventCard.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
+
+interface TicketTier {
+  id: string
+  name: string
+  price: number
+  quota: number
+  sold_count: number
+  description?: string
+  color?: string
+  seat_tier?: string | null
+}
 
 interface EventItem {
   id: string
@@ -18,23 +30,42 @@ interface EventItem {
   max_tickets: number
   status: string
   created_at: string
+  visibility?: string
+  ticket_tiers: TicketTier[]
 }
 
 const events = ref<EventItem[]>([])
 const loading = ref(true)
 const error = ref('')
-const searchQuery = ref('')
+const searchRaw = ref('')
 const activeCategory = ref('')
 
 const categoryOptions = ['Teknologi', 'Musik', 'Seni', 'Workshop', 'Olahraga', 'Bisnis', 'Lainnya']
 
+const debouncedSearch = ref('')
+const debouncedCategory = ref('')
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let catTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(searchRaw, (v) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { debouncedSearch.value = v }, 300)
+})
+
+watch(activeCategory, (v) => {
+  if (catTimer) clearTimeout(catTimer)
+  catTimer = setTimeout(() => { debouncedCategory.value = v }, 300)
+})
+
 const filteredEvents = computed(() => {
   let result = events.value
-  if (activeCategory.value) {
-    result = result.filter(e => e.category === activeCategory.value)
+  const cat = debouncedCategory.value || activeCategory.value
+  if (cat) {
+    result = result.filter(e => e.category === cat)
   }
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase()
+  const q = (debouncedSearch.value || searchRaw.value).trim().toLowerCase()
+  if (q) {
     result = result.filter(e =>
       e.title.toLowerCase().includes(q) ||
       e.description.toLowerCase().includes(q) ||
@@ -126,7 +157,7 @@ onUnmounted(() => {
       <div class="relative mb-5">
         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-text-muted">search</span>
         <input
-          v-model="searchQuery"
+          v-model="searchRaw"
           type="text"
           placeholder="Cari acara..."
           class="w-full bg-surface-card border border-border rounded-xl pl-11 pr-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
@@ -154,9 +185,7 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div v-if="loading" class="flex justify-center py-16">
-        <span class="material-symbols-outlined text-4xl text-primary animate-spin">progress_activity</span>
-      </div>
+      <SkeletonPage v-if="loading" type="grid" />
 
       <div v-else-if="error" class="text-center py-16">
         <span class="material-symbols-outlined text-5xl text-text-muted mb-4">error_outline</span>
@@ -169,11 +198,11 @@ onUnmounted(() => {
       <div v-else-if="filteredEvents.length === 0" class="text-center py-16">
         <span class="material-symbols-outlined text-5xl text-text-muted mb-4">event_busy</span>
         <p class="text-sm text-text-muted">
-          {{ searchQuery || activeCategory ? 'Tidak ada acara yang cocok' : 'Belum ada acara tersedia' }}
+           {{ searchRaw || activeCategory ? 'Tidak ada acara yang cocok' : 'Belum ada acara tersedia' }}
         </p>
       </div>
 
-      <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
+      <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <EventCard
           v-for="event in filteredEvents"
           :key="event.id"

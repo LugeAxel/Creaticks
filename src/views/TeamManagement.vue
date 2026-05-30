@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import { useTeamManagement } from '@/composables/useTeamManagement'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 
@@ -258,9 +259,7 @@ watch(selectedEventId, () => {
         </div>
       </div>
 
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <span class="material-symbols-outlined text-4xl text-text-muted animate-spin">refresh</span>
-      </div>
+      <SkeletonPage v-if="loading" type="admin-list" />
 
       <div v-else-if="roles.length === 0" class="text-center py-16 text-text-muted">
         <span class="material-symbols-outlined text-5xl mb-4">group_off</span>
@@ -408,7 +407,7 @@ watch(selectedEventId, () => {
           <p class="text-sm text-text-muted mb-6">Yakin ingin menghapus admin ini dari acara?</p>
           <div class="flex gap-3 justify-center">
             <BaseButton variant="outline" @click="cancelRemove">Batal</BaseButton>
-            <BaseButton variant="accent" :loading="removeDialogLoading" @click="confirmRemove">Hapus</BaseButton>
+            <BaseButton variant="danger" :loading="removeDialogLoading" @click="confirmRemove">Hapus</BaseButton>
           </div>
         </div>
       </div>

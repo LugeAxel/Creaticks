@@ -7,6 +7,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useCloudinary } from '@/composables/useCloudinary'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BackButton from '@/components/shared/BackButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 interface Thread {
   id: string
@@ -41,6 +42,8 @@ const loading = ref(true)
 const sending = ref(false)
 const uploadingImage = ref(false)
 const error = ref('')
+const hasMore = ref(false)
+const loadingMore = ref(false)
 const chatChannel = ref<any>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const proofFileInput = ref<HTMLInputElement | null>(null)
@@ -78,10 +81,7 @@ const isOutgoing = (msg: Message) => {
 
 const loadThreads = async () => {
   try {
-    const token = session.value?.access_token
-    const res = await fetchWithRetry('/api/chat/me', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    const res = await fetchWithRetry('/api/chat/me')
 
     if (!res.ok) {
       const data = await res.json()
@@ -101,17 +101,19 @@ const loadThreads = async () => {
 const openThread = async (thread: Thread) => {
   activeThread.value = thread
   messages.value = []
-  const token = session.value?.access_token
+  hasMore.value = false
+  loadingMore.value = false
 
-  if (!token) return
-
-  const res = await fetch(`/api/chat/thread/${thread.id}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  })
+  const res = await fetchWithRetry(`/api/chat/thread/${thread.id}?limit=50`, {})
   if (res.ok) {
     const data = await res.json()
     messages.value = data.messages || []
+    hasMore.value = !!data.has_more
   }
+
+  // Mark thread as read
+  await fetchWithRetry(`/api/chat/thread/${thread.id}/read`, { method: 'PUT' })
+  thread.unread_count = 0
 
   await nextTick()
   const container = document.querySelector('.messages-container')
@@ -120,15 +122,41 @@ const openThread = async (thread: Thread) => {
   subscribeToThread(thread.id)
 }
 
+const loadOlderMessages = async () => {
+  if (!activeThread.value || loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+
+  const oldest = messages.value.length > 0 ? messages.value[0].created_at : undefined
+  const before = oldest ? `&before=${encodeURIComponent(oldest)}` : ''
+
+  const res = await fetchWithRetry(`/api/chat/thread/${activeThread.value.id}?limit=50${before}`, {})
+  if (res.ok) {
+    const data = await res.json()
+    messages.value = [...(data.messages || []), ...messages.value]
+    hasMore.value = !!data.has_more
+    await nextTick()
+    const container = document.querySelector('.messages-container')
+    if (container) {
+      const firstNewMsg = container.querySelector('[data-message-id]')
+      if (firstNewMsg) firstNewMsg.scrollIntoView({ block: 'start' })
+    }
+  }
+  loadingMore.value = false
+}
+
+const onMessagesScroll = (e: Event) => {
+  const el = e.target as HTMLElement
+  if (el.scrollTop < 80 && hasMore.value && !loadingMore.value) {
+    loadOlderMessages()
+  }
+}
+
 const sendMessage = async () => {
   if (!messageText.value.trim() || !activeThread.value || sending.value) return
 
   const content = messageText.value.trim()
   messageText.value = ''
   sending.value = true
-
-  const token = session.value?.access_token
-  if (!token) return
 
   const optimistic: Message = {
     id: 'temp_' + Date.now(),
@@ -139,27 +167,29 @@ const sendMessage = async () => {
     image_url: null,
     created_at: new Date().toISOString()
   }
-
   messages.value.push(optimistic)
-  await nextTick()
-  const container = document.querySelector('.messages-container')
-  if (container) container.scrollTop = container.scrollHeight
 
-  const res = await fetch(`/api/chat/thread/${activeThread.value.id}/messages`, {
+  const res = await fetchWithRetry(`/api/chat/thread/${activeThread.value.id}/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content, message_type: 'text' }),
+    headers: { 'Content-Type': 'application/json' }
   })
 
   if (res.ok) {
     const data = await res.json()
     const idx = messages.value.findIndex(m => m.id === optimistic.id)
-    if (idx !== -1) {
+    if (idx >= 0) {
       messages.value[idx] = data.message
     }
+  } else {
+    // Remove optimistic message on failure
+    messages.value = messages.value.filter(m => m.id !== optimistic.id)
   }
 
   sending.value = false
+  await nextTick()
+  const container = document.querySelector('.messages-container')
+  if (container) container.scrollTop = container.scrollHeight
 }
 
 const handleFilePick = () => {
@@ -169,16 +199,16 @@ const handleFilePick = () => {
 const handleFileChange = async (e: Event) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !activeThread.value || !session.value?.access_token) return
+  if (!file || !activeThread.value) return
 
   uploadingImage.value = true
   try {
-    const result = await upload(file, session.value.access_token, 'payment-proofs')
+    const result = await upload(file, 'payment-proofs')
 
-    const res = await fetch(`/api/chat/thread/${activeThread.value.id}/messages`, {
+    const res = await fetchWithRetry(`/api/chat/thread/${activeThread.value.id}/messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.value.access_token}` },
-      body: JSON.stringify({ content: '📎 Bukti transfer', message_type: 'image', image_url: result.url })
+      body: JSON.stringify({ content: 'Bukti transfer', message_type: 'image', image_url: result.url }),
+      headers: { 'Content-Type': 'application/json' }
     })
 
     if (res.ok) {
@@ -197,7 +227,7 @@ const handleFileChange = async (e: Event) => {
 }
 
 const submitProof = async () => {
-  if (!activeThread.value || !session.value?.access_token) return
+  if (!activeThread.value) return
 
   // Validate
   if (!proofRef.value.trim()) {
@@ -221,16 +251,16 @@ const submitProof = async () => {
 
     // Upload proof image if provided
     if (proofFile.value) {
-      const result = await upload(proofFile.value, session.value.access_token, 'payment-proofs')
+      const result = await upload(proofFile.value, session.value?.access_token || '', 'payment-proofs')
       imageUrl = result.url
     }
 
     // Send image message
     if (imageUrl) {
-      const imgRes = await fetch(`/api/chat/thread/${activeThread.value.id}/messages`, {
+      const imgRes = await fetchWithRetry(`/api/chat/thread/${activeThread.value.id}/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.value.access_token}` },
-        body: JSON.stringify({ content: '📎 Bukti transfer', message_type: 'image', image_url: imageUrl })
+        body: JSON.stringify({ content: 'Bukti transfer', message_type: 'image', image_url: imageUrl }),
+        headers: { 'Content-Type': 'application/json' }
       })
       if (imgRes.ok) {
         const data = await imgRes.json()
@@ -241,10 +271,10 @@ const submitProof = async () => {
     // Send structured text message
     const textContent = `Bukti Transfer\nReferensi: ${proofRef.value}\nBank: ${proofBank.value}\nJumlah: Rp ${proofAmount.value.toLocaleString('id-ID')}`
 
-    const textRes = await fetch(`/api/chat/thread/${activeThread.value.id}/messages`, {
+    const textRes = await fetchWithRetry(`/api/chat/thread/${activeThread.value.id}/messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.value.access_token}` },
-      body: JSON.stringify({ content: textContent })
+      body: JSON.stringify({ content: textContent }),
+      headers: { 'Content-Type': 'application/json' }
     })
 
     if (textRes.ok) {
@@ -253,15 +283,15 @@ const submitProof = async () => {
     }
 
     // Save proof data to backend
-    const proofRes = await fetch(`/api/tickets/${activeThread.value.ticket_request_id}/proof`, {
+    const proofRes = await fetchWithRetry(`/api/tickets/${activeThread.value.ticket_request_id}/proof`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.value.access_token}` },
       body: JSON.stringify({
         transfer_reference: proofRef.value,
         sender_bank: proofBank.value,
         transfer_amount: proofAmount.value,
         proof_image_url: imageUrl || ''
-      })
+      }),
+      headers: { 'Content-Type': 'application/json' }
     })
 
     if (!proofRes.ok) {
@@ -271,10 +301,10 @@ const submitProof = async () => {
     }
 
     // Send system message
-    await fetch(`/api/chat/thread/${activeThread.value.id}/messages`, {
+    await fetchWithRetry(`/api/chat/thread/${activeThread.value.id}/messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.value.access_token}` },
-      body: JSON.stringify({ content: 'Bukti transfer telah dikirim. Menunggu konfirmasi admin.', message_type: 'system' })
+      body: JSON.stringify({ content: 'Bukti transfer telah dikirim. Menunggu konfirmasi admin.', message_type: 'system' }),
+      headers: { 'Content-Type': 'application/json' }
     })
 
     // Reset form
@@ -369,9 +399,7 @@ onUnmounted(() => {
           </div>
 
           <div class="overflow-y-auto h-[calc(100vh-220px)] lg:h-[calc(100vh-260px)]">
-            <div v-if="loading" class="flex items-center justify-center py-10">
-              <span class="material-symbols-outlined text-3xl text-primary animate-spin">sync</span>
-            </div>
+            <SkeletonPage v-if="loading" type="chat" />
 
             <div v-else-if="error" class="px-4 py-10 text-center text-sm text-text-muted">
               {{ error }}
@@ -413,7 +441,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="flex-1 overflow-y-auto messages-container p-5 space-y-4">
+          <div class="flex-1 overflow-y-auto messages-container p-5 space-y-4" @scroll="onMessagesScroll">
             <div v-if="!activeThread" class="flex items-center justify-center h-full text-center text-text-muted">
               <div>
                 <span class="material-symbols-outlined text-5xl text-text-muted mb-4">chat</span>
@@ -422,7 +450,13 @@ onUnmounted(() => {
             </div>
 
             <div v-else>
-              <div v-for="message in messages" :key="message.id" class="flex" :class="isOutgoing(message) ? 'justify-end' : 'justify-start'">
+              <div v-if="loadingMore" class="flex justify-center py-3">
+                <span class="material-symbols-outlined text-lg text-text-muted animate-spin">sync</span>
+              </div>
+              <div v-if="hasMore && !loadingMore" class="text-center py-2">
+                <button @click="loadOlderMessages" class="text-xs text-primary font-semibold cursor-pointer hover:underline">Muat pesan lama</button>
+              </div>
+              <div v-for="message in messages" :key="message.id" :data-message-id="message.id" class="flex" :class="isOutgoing(message) ? 'justify-end' : 'justify-start'">
                 <div :class="[`max-w-[85%] rounded-3xl px-4 py-3 text-sm`, message.message_type === 'system' ? 'bg-surface-variant text-text-muted italic' : isOutgoing(message) ? 'bg-primary text-white' : 'bg-surface-variant text-text']">
                   <img
                     v-if="message.image_url"

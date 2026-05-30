@@ -6,6 +6,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BackButton from '@/components/shared/BackButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 interface Thread {
   id: string
@@ -265,9 +266,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-10">
-          <span class="material-symbols-outlined text-3xl text-primary animate-spin">sync</span>
-        </div>
+        <SkeletonPage v-if="loading" type="chat" />
 
         <div v-else-if="threads.length === 0" class="text-center py-10 px-4">
           <span class="material-symbols-outlined text-4xl text-text-muted mb-3">chat</span>

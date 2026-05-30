@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BackButton from '@/components/shared/BackButton.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
@@ -101,7 +102,7 @@ const canContinue = computed(() => {
 const paintedSeatCountPerTier = computed(() => {
   const counts: Record<string, number> = {}
   if (!useSeatMap.value) return counts
-  for (const seat of seatMapData.value.seats) {
+  for (const seat of seatMapData.value.seats ?? []) {
     if (seat.tier) {
       counts[seat.tier] = (counts[seat.tier] || 0) + 1
     }
@@ -594,6 +595,8 @@ const removeInvitedAdmin = (idx: number) => {
 
 <template>
   <AppLayout :title="isEditing ? 'Edit Acara' : 'Buat Acara'">
+    <SkeletonPage v-if="loadingEvent" type="editor" />
+    <template v-else>
     <div class="max-w-3xl mx-auto px-4 md:px-6 py-6">
       <div class="flex items-center justify-between mb-6">
         <BackButton />
@@ -1132,5 +1135,6 @@ const removeInvitedAdmin = (idx: number) => {
         </div>
       </div>
     </div>
+    </template>
   </AppLayout>
 </template>

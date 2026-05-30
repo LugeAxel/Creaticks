@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const router = useRouter()
 const tickets = ref<any[]>([])
@@ -95,9 +96,7 @@ onUnmounted(() => {
         </BaseButton>
       </div>
 
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <span class="material-symbols-outlined text-3xl text-primary animate-spin">sync</span>
-      </div>
+      <SkeletonPage v-if="loading" type="list" />
 
       <div v-else-if="error" class="text-center py-16">
         <span class="material-symbols-outlined text-5xl text-text-muted mb-4">error_outline</span>

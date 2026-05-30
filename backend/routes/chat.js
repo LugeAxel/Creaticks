@@ -24,6 +24,46 @@ async function canAccessThread(threadId, userId) {
   return null
 }
 
+async function enrichUnreadCount(threads, userId) {
+  if (!threads.length) return threads
+
+  const threadIds = threads.map(t => t.id)
+
+  const { data: enrichments } = await supabaseAdmin
+    .rpc('get_chat_enrichments', { p_thread_ids: threadIds, p_user_id: userId })
+
+  const enrichMap = {}
+  if (enrichments) {
+    for (const row of enrichments) {
+      enrichMap[row.thread_id] = {
+        last_message: row.last_message?.content ? row.last_message : null,
+        unread_count: Number(row.unread_count)
+      }
+    }
+  }
+
+  // Also batch fetch read receipts for the calling endpoint to use directly
+  const { data: receiptData } = await supabaseAdmin
+    .from('chat_read_receipts')
+    .select('thread_id, last_read_at')
+    .in('thread_id', threadIds)
+    .eq('user_id', userId)
+
+  const receiptMap = {}
+  if (receiptData) {
+    for (const r of receiptData) {
+      receiptMap[r.thread_id] = r.last_read_at
+    }
+  }
+
+  return threads.map(t => ({
+    ...t,
+    last_message: enrichMap[t.id]?.last_message || null,
+    unread_count: enrichMap[t.id]?.unread_count || 0,
+    last_read_at: receiptMap[t.id] || null
+  }))
+}
+
 router.get('/event/:eventId', requireAuth, async (req, res) => {
   const { eventId } = req.params
 
@@ -75,34 +115,19 @@ router.get('/event/:eventId', requireAuth, async (req, res) => {
     }
   }))
 
-  const enriched = await Promise.all((threads || []).map(async (t) => {
-    const { data: lastMsg } = await supabaseAdmin
-      .from('chat_messages')
-      .select('content, created_at, sender_id')
-      .eq('thread_id', t.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+  const enriched = await enrichUnreadCount(threads || [], req.user.id)
 
-    const { count } = await supabaseAdmin
-      .from('chat_messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('thread_id', t.id)
-      .neq('sender_id', req.user.id)
-
-    const buyerProfile = buyerProfiles[t.buyer_id] || { name: 'Unknown', email: '' }
-
-    return {
-      ...t,
-      last_message: lastMsg || null,
-      unread_count: count || 0,
-      buyer_name: buyerProfile.name,
-      ticket_tier: t.ticket_request?.tier_name || 'Regular',
-      ticket_status: t.ticket_request?.status || 'pending'
-    }
-  }))
-
-  res.json({ threads: enriched })
+  return res.json({
+    threads: enriched.map((t) => {
+      const buyerProfile = buyerProfiles[t.buyer_id] || { name: 'Unknown', email: '' }
+      return {
+        ...t,
+        buyer_name: buyerProfile.name,
+        ticket_tier: t.ticket_request?.tier_name || 'Regular',
+        ticket_status: t.ticket_request?.status || 'pending'
+      }
+    })
+  })
 })
 
 router.get('/me', requireAuth, async (req, res) => {
@@ -133,47 +158,40 @@ router.get('/me', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal mengambil chat' })
   }
 
-  const enriched = await Promise.all((threads || []).map(async (t) => {
-    const { data: lastMsg } = await supabaseAdmin
-      .from('chat_messages')
-      .select('content, created_at, sender_id')
-      .eq('thread_id', t.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+  const enriched = await enrichUnreadCount(threads || [], req.user.id)
 
-    const { count } = await supabaseAdmin
-      .from('chat_messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('thread_id', t.id)
-      .neq('sender_id', req.user.id)
-
-    return {
+  res.json({
+    threads: enriched.map((t) => ({
       ...t,
       event_name: t.events?.title || 'Acara',
       ticket_tier: t.ticket_request?.tier_name || 'Regular',
-      ticket_status: t.ticket_request?.status || 'pending',
-      last_message: lastMsg || null,
-      unread_count: count || 0
-    }
-  }))
-
-  res.json({ threads: enriched })
+      ticket_status: t.ticket_request?.status || 'pending'
+    }))
+  })
 })
 
 router.get('/thread/:threadId', requireAuth, async (req, res) => {
   const { threadId } = req.params
+  const limit = Math.min(parseInt(req.query.limit) || 50, 100)
+  const before = req.query.before
 
   const thread = await canAccessThread(threadId, req.user.id)
   if (!thread) {
     return res.status(403).json({ error: 'Akses ditolak' })
   }
 
-  const { data: messages, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('chat_messages')
     .select('*')
     .eq('thread_id', threadId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (before) {
+    query = query.lt('created_at', before)
+  }
+
+  const { data: messages, error } = await query
 
   if (error) {
     logger.error('CHAT-MESSAGES', 'Failed to fetch messages', {
@@ -184,14 +202,45 @@ router.get('/thread/:threadId', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal mengambil pesan' })
   }
 
-  const { data: user } = await supabaseAdmin.auth.admin.getUserById(req.user.id)
-  const currentUserName = user?.user?.user_metadata?.name || user?.user?.email || 'Unknown'
+  const hasMore = messages && messages.length >= limit
+  const currentUserName = req.user.user_metadata?.name || req.user.email || 'Unknown'
 
   res.json({
     thread,
-    messages,
-    current_user: { id: req.user.id, name: currentUserName }
+    messages: messages ? messages.reverse() : [],
+    current_user: { id: req.user.id, name: currentUserName },
+    has_more: !!hasMore
   })
+})
+
+router.put('/thread/:threadId/read', requireAuth, async (req, res) => {
+  const { threadId } = req.params
+
+  const thread = await canAccessThread(threadId, req.user.id)
+  if (!thread) {
+    return res.status(403).json({ error: 'Akses ditolak' })
+  }
+
+  const { error } = await supabaseAdmin
+    .from('chat_read_receipts')
+    .upsert({
+      thread_id: threadId,
+      user_id: req.user.id,
+      last_read_at: new Date().toISOString()
+    }, {
+      onConflict: 'thread_id,user_id'
+    })
+
+  if (error) {
+    logger.error('CHAT-READ', 'Failed to mark as read', {
+      requestId: req.requestId,
+      threadId,
+      error: error.message
+    })
+    return res.status(500).json({ error: 'Gagal menandai telah dibaca' })
+  }
+
+  res.json({ ok: true })
 })
 
 router.post('/thread/:threadId/messages', requireAuth, async (req, res) => {

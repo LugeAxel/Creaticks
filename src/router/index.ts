@@ -127,7 +127,8 @@ const router = createRouter({
     {
       path: '/events/:id',
       name: 'event-detail',
-      component: () => import('@/views/EventDetail.vue')
+      component: () => import('@/views/EventDetail.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/events/:eventId/manage',
@@ -188,14 +189,8 @@ router.beforeEach(async (to, _from, next) => {
   const isAuthenticated = !!session
   const role = session?.user?.user_metadata?.role
 
-  console.log('[Router]', `Navigation "${_from.path}" -> "${to.path}"`, {
-    authenticated: isAuthenticated,
-    role: role || null,
-    emailVerified: session?.user?.email_confirmed_at != null
-  })
-
   if (to.meta.requiresAuth && !isAuthenticated) {
-    console.log('[Router]', 'Blocked: requiresAuth, not authenticated. Redirecting to /login')
+    sessionStorage.setItem('redirectAfterLogin', to.fullPath)
     return next({ name: 'login' })
   }
 
@@ -204,7 +199,6 @@ router.beforeEach(async (to, _from, next) => {
 
     if (!emailVerified) {
       if (to.name !== 'email-verification') {
-        console.log('[Router]', 'Blocked: email not verified. Redirecting to /verifikasi-email')
         return next({
           name: 'email-verification',
           query: { email: session.user.email }
@@ -218,22 +212,18 @@ router.beforeEach(async (to, _from, next) => {
     const needsRole = !role
 
     if (needsRole && to.name !== 'role-picker') {
-      console.log('[Router]', 'Blocked: no role set. Redirecting to /pilih-peran')
       return next({ name: 'role-picker' })
     }
 
     if (to.name === 'role-picker' && !needsRole) {
-      console.log('[Router]', 'Role already set, redirecting from /pilih-peran to dashboard')
       return next({ name: role === 'creator' ? 'creator-dashboard' : 'dashboard' })
     }
 
     if (to.meta.requiresCreator && role !== 'creator') {
-      console.log('[Router]', 'Blocked: requiresCreator but role is', role, '. Redirecting to /')
       return next({ name: 'landing' })
     }
 
     if (to.name === 'landing') {
-      console.log('[Router]', 'Authenticated on landing, redirecting to dashboard')
       return next({ name: role === 'creator' ? 'creator-dashboard' : 'dashboard' })
     }
   }
@@ -241,17 +231,14 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresGuest && isAuthenticated) {
     const emailVerified = session.user?.email_confirmed_at != null
     if (!emailVerified) {
-      console.log('[Router]', 'Guest page blocked: email not verified. Redirecting to /verifikasi-email')
       return next({
         name: 'email-verification',
         query: { email: session.user.email }
       })
     }
-    console.log('[Router]', 'Guest page blocked: already authenticated. Redirecting to dashboard')
     return next({ name: role === 'creator' ? 'creator-dashboard' : 'dashboard' })
   }
 
-  console.log('[Router]', 'Allowed:', to.path)
   next()
 })
 

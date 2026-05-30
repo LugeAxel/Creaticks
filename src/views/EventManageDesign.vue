@@ -22,6 +22,7 @@ const pendingFile = ref<File | null>(null)
 const localPreviewUrl = ref<string | null>(null)
 const saving = ref(false)
 const initLoading = ref(true)
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
 const fontMap: Record<string, string> = {
@@ -360,9 +361,7 @@ async function saveDesign() {
 
     <!-- Right Preview Area -->
     <main class="flex-1 preview-area">
-      <div v-if="initLoading" class="flex items-center justify-center h-full">
-        <span class="material-symbols-outlined text-3xl text-white/30 animate-spin">sync</span>
-      </div>
+      <SkeletonPage v-if="initLoading" type="editor" />
 
       <template v-else>
         <div class="preview-hint">Live Preview</div>

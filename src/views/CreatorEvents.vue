@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const router = useRouter()
 const { session, getAuthHeaders } = useAuth()
@@ -86,9 +87,7 @@ onMounted(async () => {
         </router-link>
       </div>
 
-      <div v-if="loading" class="flex justify-center py-20">
-        <span class="material-symbols-outlined text-4xl text-primary animate-spin">progress_activity</span>
-      </div>
+      <SkeletonPage v-if="loading" type="list" />
 
       <div v-else-if="events.length === 0" class="text-center py-20">
         <span class="material-symbols-outlined text-5xl text-text-muted mb-4">event</span>

@@ -1,14 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
+import { useToast } from '@/composables/useToast'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BaseInput from '@/components/shared/BaseInput.vue'
 import HCaptcha from '@/components/shared/HCaptcha.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { signIn, signInWithOAuth, resetPasswordForEmail } = useAuth()
+const { showToast } = useToast()
+
+onMounted(() => {
+  if (route.query.expired === '1') {
+    showToast('Sesi Anda telah berakhir, silakan masuk kembali', 'warning')
+  }
+})
 
 const email = ref('')
 const password = ref('')
@@ -60,16 +69,22 @@ const handleLogin = async () => {
 
   if (session) {
     const verified = session.user?.email_confirmed_at != null
+    const redirect = sessionStorage.getItem('redirectAfterLogin')
+    sessionStorage.removeItem('redirectAfterLogin')
     if (!verified) {
       router.push({ name: 'email-verification', query: { email: email.value } })
     } else {
-      router.push('/')
+      router.push(redirect || '/')
     }
   }
 }
 
 const handleOAuth = async (provider: 'google' | 'github') => {
   error.value = ''
+  const pending = sessionStorage.getItem('redirectAfterLogin')
+  if (!pending) {
+    sessionStorage.setItem('redirectAfterLogin', '/')
+  }
   const { error: oauthError } = await signInWithOAuth(provider)
   if (oauthError) {
     error.value = oauthError.message

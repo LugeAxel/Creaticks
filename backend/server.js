@@ -18,7 +18,7 @@ const main = async () => {
     import('./logger.js')
   ])
 
-  const [{ default: authRoutes }, { default: uploadRoutes }, { default: roleRoutes }, { default: invitationRoutes }, { default: eventRoutes }, { default: ticketRoutes }, { default: notificationRoutes }, { default: chatRoutes }, { default: ticketDesignRoutes }, { default: seatRoutes }] = await Promise.all([
+  const [{ default: authRoutes }, { default: uploadRoutes }, { default: roleRoutes }, { default: invitationRoutes }, { default: eventRoutes }, { default: ticketRoutes }, { default: notificationRoutes }, { default: chatRoutes }, { default: ticketDesignRoutes }, { default: seatRoutes }, { default: statsRoutes }] = await Promise.all([
     import('./routes/auth.js'),
     import('./routes/upload.js'),
     import('./routes/role.js'),
@@ -28,15 +28,16 @@ const main = async () => {
     import('./routes/notifications.js'),
     import('./routes/chat.js'),
     import('./routes/ticketDesigns.js'),
-    import('./routes/seats.js')
+    import('./routes/seats.js'),
+    import('./routes/stats.js')
   ])
 
   const app = express()
-  const PORT = process.env.PORT || 3001
+  const PORT = process.env.PORT
 
   app.set('trust proxy', 1)
   app.use(helmet())
-  app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }))
+  app.use(cors({ origin: process.env.FRONTEND_URL} || 'http://localhost:5173' ))
   app.use(express.json({ limit: '10mb' }))
   app.use(logger.request)
   app.use(logger.response)
@@ -77,6 +78,7 @@ const main = async () => {
   app.use('/api/notifications', notificationRoutes)
   app.use('/api/chat', chatRoutes)
   app.use('/api', seatRoutes)
+  app.use('/api/stats', statsRoutes)
   app.use('/api/ticket-designs', ticketDesignRoutes)
 
   const { internalError } = await import('./lib/errorHelper.js')
@@ -94,7 +96,7 @@ const main = async () => {
   // Configure Socket.IO
   const io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      origin: [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:4173'].filter(Boolean),
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']
     }
   })

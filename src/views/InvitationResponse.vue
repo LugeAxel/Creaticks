@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useToast } from '@/composables/useToast'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -153,9 +154,7 @@ onMounted(async () => {
   <AppLayout title="Tanggapi Undangan">
     <div class="max-w-lg mx-auto px-6 py-8">
 
-      <div v-if="loading" class="flex items-center justify-center py-20">
-        <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-      </div>
+      <SkeletonPage v-if="loading" type="invitation" />
 
       <div v-else-if="error" class="text-center py-20">
         <span class="material-symbols-outlined text-5xl text-text-muted mb-4">error_outline</span>

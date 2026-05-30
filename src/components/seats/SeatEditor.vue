@@ -40,6 +40,7 @@ const seatMap = ref<Record<string, EditorSeat>>({})
 
 function initSeatMap() {
   seatMap.value = {}
+  if (!props.modelValue.seats) return
   for (const s of props.modelValue.seats) {
     const key = `${s.x},${s.y}`
     seatMap.value[key] = { ...s }

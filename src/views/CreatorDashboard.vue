@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 import type { User } from '@supabase/supabase-js'
 
 const router = useRouter()
@@ -78,9 +79,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <span class="material-symbols-outlined text-3xl text-primary animate-spin">sync</span>
-      </div>
+      <SkeletonPage v-if="loading" type="dashboard" />
 
       <div v-else>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">

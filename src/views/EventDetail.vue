@@ -9,6 +9,7 @@ import BackButton from '@/components/shared/BackButton.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import SeatSelector from '@/components/seats/SeatSelector.vue'
 import type { SeatData, TierInfo } from '@/components/seats/SeatMap.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -82,9 +83,12 @@ const seatTiersWithQuantity = computed(() => {
   )
 })
 
-const allSelectedSeatIds = computed(() =>
-  Object.values(seatsByTier.value).flat()
-)
+const allSelectedSeatIds = computed(() => {
+  if (!event.value?.ticket_tiers) return []
+  return event.value.ticket_tiers
+    .filter((t: any) => t.seat_tier)
+    .flatMap((t: any) => seatsByTier.value[t.id] || [])
+})
 
 const filteredSeatsForActiveTier = computed(() => {
   return seats.value
@@ -132,7 +136,10 @@ const formatTime = (dateStr: string) => {
 
 const initMap = async (lat: number, lng: number) => {
   await nextTick()
-  if (!mapContainer.value) return
+  if (!mapContainer.value) {
+    console.warn('[EventDetail] mapContainer ref is null, cannot init map')
+    return
+  }
 
   mapInstance = L.map(mapContainer.value, {
     center: [lat, lng],
@@ -225,6 +232,31 @@ const handleRequestTicket = async () => {
 
   if (items.length === 0) return
 
+  const allSeatIds = items
+    .filter((item: any) => {
+      const tier = event.value.ticket_tiers.find((t: any) => t.name === item.tier_name)
+      return tier?.seat_tier
+    })
+    .flatMap((item: any) => {
+      const tier = event.value.ticket_tiers.find((t: any) => t.name === item.tier_name)
+      return tier ? (seatsByTier.value[tier.id] || []) : []
+    })
+
+  const releaseSeatLocks = async () => {
+    if (allSeatIds.length === 0) return
+    try {
+      for (const seatId of allSeatIds) {
+        await fetch(`/api/seat-locks/${seatId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sessionId.value })
+        })
+      }
+      seatsByTier.value = {}
+      await loadSeats()
+    } catch { /* best-effort cleanup */ }
+  }
+
   requestLoading.value = true
   requestError.value = ''
 
@@ -250,10 +282,8 @@ const handleRequestTicket = async () => {
       }
     }
 
-    const allSeatIds = Object.values(seatsByTier.value).flat()
     if (allSeatIds.length > 0) {
       body.seat_ids = allSeatIds
-      body.seat_tier_map = { ...seatsByTier.value }
     }
 
     const res = await fetchWithRetry('/api/tickets', {
@@ -268,6 +298,7 @@ const handleRequestTicket = async () => {
     const data = await res.json()
 
     if (!res.ok) {
+      await releaseSeatLocks()
       if (res.status === 403 && data.error?.includes('Kreator')) {
         requestError.value = 'Kamu adalah penyelenggara acara ini'
       } else {
@@ -278,6 +309,7 @@ const handleRequestTicket = async () => {
 
     router.push('/tickets')
   } catch {
+    await releaseSeatLocks()
     requestError.value = 'Terjadi kesalahan, silakan coba lagi'
   } finally {
     requestLoading.value = false
@@ -310,13 +342,11 @@ async function loadSeats() {
 
 onMounted(async () => {
   try {
-    const headers: Record<string, string> = {}
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.access_token) {
-      headers.Authorization = `Bearer ${session.access_token}`
       authToken.value = session.access_token
     }
-    const res = await fetch(`/api/events/${eventId}`, { headers })
+    const res = await fetchWithRetry(`/api/events/${eventId}`)
     if (res.ok) {
       const data = await res.json()
       event.value = data.event
@@ -325,12 +355,16 @@ onMounted(async () => {
       }
 
       if (event.value?.seat_map) {
-        const sm = typeof event.value.seat_map === 'string'
-          ? JSON.parse(event.value.seat_map)
-          : event.value.seat_map
-        if (sm && sm.gridX && sm.gridY) {
-          seatMapEnabled.value = true
-          seatMapGrid.value = { gridX: sm.gridX, gridY: sm.gridY }
+        try {
+          const sm = typeof event.value.seat_map === 'string'
+            ? JSON.parse(event.value.seat_map)
+            : event.value.seat_map
+          if (sm && sm.gridX && sm.gridY) {
+            seatMapEnabled.value = true
+            seatMapGrid.value = { gridX: sm.gridX, gridY: sm.gridY }
+          }
+        } catch {
+          // malformed seat_map, skip
         }
       }
 
@@ -342,12 +376,6 @@ onMounted(async () => {
           color: t.color || '#6C63FF'
         }))
       }
-
-      if (event.value?.location_lat && event.value?.location_lng) {
-        initMap(event.value.location_lat, event.value.location_lng)
-      } else if (event.value?.location) {
-        geocodeLocation(event.value.location)
-      }
     }
 
     if (seatMapEnabled.value) {
@@ -357,6 +385,15 @@ onMounted(async () => {
     // fallback
   } finally {
     loading.value = false
+    nextTick(() => {
+      const ev = event.value
+      if (!ev) return
+      if (ev.location_lat && ev.location_lng) {
+        initMap(Number(ev.location_lat), Number(ev.location_lng))
+      } else if (ev.location) {
+        geocodeLocation(ev.location)
+      }
+    })
   }
 })
 
@@ -395,9 +432,7 @@ function getTierName(tierId: string | null) {
 <template>
   <AppLayout>
   <div class="min-h-screen bg-surface">
-    <div v-if="loading" class="flex items-center justify-center min-h-[60vh]">
-      <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-    </div>
+    <SkeletonPage v-if="loading" type="detail" />
 
     <div v-else-if="!event" class="text-center py-20 px-6">
       <span class="material-symbols-outlined text-5xl text-text-muted mb-4">event_busy</span>
@@ -408,12 +443,12 @@ function getTierName(tierId: string | null) {
 
     <div v-else class="pb-24 md:pb-8">
       <div class="relative">
-        <div class="h-56 md:h-80 bg-surface-variant overflow-hidden">
+        <div class="h-56 md:h-80 bg-surface-variant overflow-hidden rounded-t-2xl">
           <img
             v-if="currentImage"
             :src="optimizeUrl(currentImage)"
             :alt="event.title"
-            class="w-full h-full object-cover transition-all duration-300"
+            class="w-full h-full object-cover transition-all duration-300 "
           />
           <div v-else class="w-full h-full flex items-center justify-center">
             <span class="material-symbols-outlined text-6xl text-text-muted">event</span>
@@ -446,6 +481,7 @@ function getTierName(tierId: string | null) {
               <div class="flex flex-wrap items-center gap-2 text-sm text-text-muted">
                 <span v-if="event.category" class="px-2.5 py-1 rounded-full bg-primary/5 text-primary text-xs font-semibold">{{ event.category }}</span>
                 <span class="px-2.5 py-1 rounded-full bg-surface-variant text-text-muted text-xs font-semibold">{{ event.event_format || 'offline' }}</span>
+                <span v-if="event.visibility === 'private'" class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">Acara Pribadi</span>
               </div>
             </div>
           </div>
@@ -465,15 +501,15 @@ function getTierName(tierId: string | null) {
                 <p v-if="event.location_detail" class="text-text-muted text-xs mt-0.5">{{ event.location_detail }}</p>
               </div>
             </div>
-            <div v-if="event.location" class="mt-3">
-              <div class="relative h-48 rounded-xl border border-border/50 overflow-hidden">
-                <div v-if="mapLoading" class="absolute inset-0 bg-surface-variant flex items-center justify-center z-[1000]">
+            <div v-if="event.location || (event.location_lat && event.location_lng)" class="mt-3">
+              <div class="relative rounded-xl border border-border/50 overflow-hidden">
+                <div v-if="mapLoading" class="absolute inset-0 bg-surface-variant flex items-center justify-center">
                   <span class="material-symbols-outlined text-3xl text-text-muted animate-spin">progress_activity</span>
                 </div>
-                <div v-else-if="mapError" class="absolute inset-0 bg-surface-variant flex items-center justify-center z-[1000]">
+                <div v-else-if="mapError" class="absolute inset-0 bg-surface-variant flex items-center justify-center">
                   <p class="text-sm text-text-muted">{{ mapError }}</p>
                 </div>
-                <div ref="mapContainer" class="h-full w-full"></div>
+                <div ref="mapContainer" class="w-full min-h-[250px] md:min-h-[300px]"></div>
               </div>
               <div v-if="event.location_lat && event.location_lng" class="mt-1.5 flex items-center justify-between">
                 <p class="text-xs text-text-muted font-mono">{{ Number(event.location_lat).toFixed(6) }}, {{ Number(event.location_lng).toFixed(6) }}</p>
@@ -552,9 +588,9 @@ function getTierName(tierId: string | null) {
         </div>
       </div>
 
-      <div v-if="seatMapEnabled" class="mt-6">
-        <h2 class="text-lg font-heading font-bold text-text-heading mb-3">Pilih Kursi</h2>
-        <div v-if="seatTiersWithQuantity.length > 1" class="flex gap-2 mb-4 overflow-x-auto">
+      <div v-if="seatMapEnabled" class="mt-6 border-t border-border/50 pt-6">
+        <h2 class="text-lg font-heading font-bold text-text-heading mb-3 text-center">Pilih Kursi</h2>
+        <div v-if="seatTiersWithQuantity.length > 1" class="flex gap-2 mb-4 justify-center overflow-x-auto scrollbar-hide">
           <button
             v-for="tier in seatTiersWithQuantity"
             :key="tier.id"
@@ -581,10 +617,10 @@ function getTierName(tierId: string | null) {
             @change="(ids: string[]) => onTierSeatChange(activeSeatTierId, ids)"
           />
         </template>
-        <div v-else class="bg-surface-card rounded-xl border border-border/50 p-8 text-center">
+        <div v-else class="bg-surface-card rounded-xl border border-border/50 p-8 text-center mx-5">
           <span class="material-symbols-outlined text-4xl text-text-muted mb-3">event_seat</span>
           <h3 class="text-sm font-semibold text-text-heading mb-1">Kursi Belum Tersedia</h3>
-          <p class="text-xs text-text-muted">Penyelenggara belum mengatur konfigurasi kursi untuk acara ini.</p>
+          <p class="text-xs text-text-muted">Yuk pilih tier tiket dengan kursi yang tersedia!</p>
         </div>
       </div>
 
@@ -595,7 +631,7 @@ function getTierName(tierId: string | null) {
             <p class="text-xs text-text-muted">Total</p>
             <p class="text-xl font-heading font-bold text-text-heading">Rp {{ totalPrice.toLocaleString('id-ID') }}</p>
             <p v-if="seatMapEnabled && hasSeatTierSelected" class="text-xs text-primary mt-1">
-              {{ Object.values(seatsByTier).flat().length }} kursi dipilih
+              {{ allSelectedSeatIds.length }} kursi dipilih
             </p>
           </div>
           <div class="flex flex-col gap-1 items-end">
@@ -651,3 +687,9 @@ function getTierName(tierId: string | null) {
   </div>
   </AppLayout>
 </template>
+
+<style scoped>
+:deep(.leaflet-container) {
+  z-index: 10;
+}
+</style>

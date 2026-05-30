@@ -207,18 +207,10 @@ defineExpose({ selectedSeatIds, releaseAll })
 
 <template>
   <div>
-    <div v-if="error" class="mb-3 p-3 rounded-xl bg-error/10 border border-error/20 text-sm text-error font-medium">
-      {{ error }}
-    </div>
-    <div v-if="isLocking" class="mb-3 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm text-primary flex items-center gap-2">
-      <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
-      Memproses kursi...
-    </div>
-
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-evenly ml-5 mr-5 mb-4">
       <div>
         <p class="text-sm text-text-muted">
-          {{ availableSeats.length }} kursi tersedia
+          {{ availableSeats.length }} Kursi
         </p>
         <p class="text-xs text-text-muted">
           Dipilih: {{ selectedCount }}/{{ maxSeats }}
@@ -239,7 +231,19 @@ defineExpose({ selectedSeatIds, releaseAll })
       </div>
     </div>
 
-    <div class="bg-surface-card rounded-xl border border-border/50 p-4">
+    <div class="bg-surface-card rounded-xl border border-border/50 p-4 relative">
+      <div v-if="error" class="absolute inset-0 z-10 bg-surface-card/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 rounded-xl px-6">
+        <p class="text-sm text-error font-medium text-center">{{ error }}</p>
+        <button class="px-4 py-2 text-sm font-semibold rounded-xl bg-error text-white hover:bg-error/90 active:bg-error/80 transition cursor-pointer" @click="error = ''">
+          Tutup
+        </button>
+      </div>
+      <div v-if="isLocking" class="absolute inset-0 z-10 bg-surface-card/90 backdrop-blur-sm flex items-center justify-center rounded-xl">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-2xl text-primary animate-spin">progress_activity</span>
+          <p class="text-sm text-primary font-medium">Memproses kursi...</p>
+        </div>
+      </div>
       <div class="flex justify-center mb-2">
         <div class="w-24 h-3 rounded bg-gray-200 text-center text-[8px] text-gray-500 flex items-center justify-center">
           STAGE

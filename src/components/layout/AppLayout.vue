@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { useChatUnread } from '@/composables/useChatUnread'
 import Sidebar from './Sidebar.vue'
 import BottomNav from './BottomNav.vue'
 import TopBar from './TopBar.vue'
@@ -13,26 +14,7 @@ defineProps<{
 }>()
 
 const user = ref<User | null>(null)
-const chatUnread = ref(0)
-
-let unreadInterval: ReturnType<typeof setInterval> | null = null
-
-const fetchChatUnread = async () => {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.access_token) return
-  try {
-    const res = await fetch('/api/chat/me', {
-      headers: { Authorization: `Bearer ${session.access_token}` }
-    })
-    if (res.ok) {
-      const data = await res.json()
-      const total = (data.threads || []).reduce((sum: number, t: any) => sum + (t.unread_count || 0), 0)
-      chatUnread.value = total
-    }
-  } catch {
-    // fail silently
-  }
-}
+const { chatUnread, fetchUnread, initRealtime, cleanupRealtime } = useChatUnread()
 
 onMounted(async () => {
   const { data: { session } } = await supabase.auth.getSession()
@@ -42,13 +24,21 @@ onMounted(async () => {
     user.value = session?.user ?? null
   })
 
-  await fetchChatUnread()
-  // Poll for unread count every 30s
-  unreadInterval = setInterval(fetchChatUnread, 60000)
+  await fetchUnread()
+  initRealtime()
+})
+
+onUnmounted(() => {
+  cleanupRealtime()
 })
 
 watch(user, (u) => {
-  if (u) fetchChatUnread()
+  if (u) {
+    fetchUnread()
+  } else {
+    chatUnread.value = 0
+    cleanupRealtime()
+  }
 })
 </script>
 
@@ -56,7 +46,7 @@ watch(user, (u) => {
   <div class="min-h-screen bg-surface">
     <Sidebar :user="user" :chatUnread="chatUnread" />
 
-    <div class="md:ml-[280px] min-h-screen flex flex-col pb-20 md:pb-0">
+    <div class="md:ml-[80px] min-h-screen flex flex-col pb-20 md:pb-0">
       <TopBar :title="title" :user="user" />
 
       <Breadcrumb />

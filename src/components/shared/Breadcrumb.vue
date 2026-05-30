@@ -39,7 +39,7 @@ const crumbs = computed<Crumb[]>(() => {
 </script>
 
 <template>
-  <nav v-if="crumbs.length > 1" class="flex items-center gap-1.5 text-xs md:text-sm text-text-muted px-4 md:px-6 pt-3 md:pt-4 pb-0 max-w-5xl mx-auto w-full">
+  <nav v-if="crumbs.length > 1" class="flex items-center gap-1.5 text-xs md:text-sm text-text-muted px-4 md:px-6 pt-3 md:pt-4 pb-0 max-w-5xl mx-auto w-full mb-8">
     <template v-for="(crumb, idx) in crumbs" :key="idx">
       <router-link
         :to="crumb.to"

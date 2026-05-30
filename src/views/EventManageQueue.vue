@@ -7,6 +7,7 @@ import { useEventContext } from '@/composables/useEventContext'
 import { useToast } from '@/composables/useToast'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import { fetchWithRetry } from '@/lib/api'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const { showToast } = useToast()
 
@@ -190,9 +191,7 @@ onUnmounted(() => {
       >{{ f.label }} ({{ tickets.filter(t => f.key === 'all' ? true : t.status === f.key).length }})</button>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-    </div>
+    <SkeletonPage v-if="loading" type="list" />
 
     <div v-else-if="filteredTickets.length === 0" class="text-center py-20">
       <span class="material-symbols-outlined text-5xl text-text-muted mb-4">inbox</span>
@@ -256,9 +255,8 @@ onUnmounted(() => {
             @click="updateStatus(ticket.id, 'confirmed')"
           >Konfirmasi</BaseButton>
           <BaseButton
-            variant="secondary"
+            variant="danger"
             size="sm"
-            class="!text-error !border-error"
             :disabled="pendingAction !== null"
             @click="updateStatus(ticket.id, 'cancelled')"
           >Tolak</BaseButton>

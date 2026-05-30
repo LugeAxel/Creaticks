@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BackButton from '@/components/shared/BackButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 interface TicketRequest {
   id: string
@@ -133,9 +134,7 @@ onMounted(fetchTickets)
           >{{ f.label }} ({{ tickets.filter(t => f.key === 'all' ? true : t.status === f.key).length }})</button>
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-20">
-          <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-        </div>
+        <SkeletonPage v-if="loading" type="list" />
 
         <div v-else-if="filteredTickets.length === 0" class="text-center py-20">
           <span class="material-symbols-outlined text-5xl text-text-muted mb-4">inbox</span>
@@ -196,9 +195,8 @@ onMounted(fetchTickets)
                 @click="updateStatus(ticket.id, 'confirmed')"
               >Konfirmasi</BaseButton>
               <BaseButton
-                variant="secondary"
+                variant="danger"
                 size="sm"
-                class="!text-error !border-error"
                 @click="updateStatus(ticket.id, 'cancelled')"
               >Tolak</BaseButton>
             </div>

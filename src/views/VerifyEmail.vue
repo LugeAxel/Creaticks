@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,88 +36,67 @@ onMounted(async () => {
   const hasHash = window.location.hash.includes('access_token')
   const code = route.query.code as string
 
-  console.log('[VerifyEmail]', 'Page loaded', { hash: hasHash, code: !!code, url: window.location.href })
-
   if (hasHash) {
-    console.log('[VerifyEmail]', 'OAuth hash detected — polling for session...')
+    const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'))
+    const isRecovery = hashParams.get('type') === 'recovery'
+
     for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 200))
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
+        if (isRecovery) {
+          router.replace({ name: 'reset-password' })
+          return
+        }
         const role = session.user.user_metadata?.role
-        console.log('[VerifyEmail]', `Session found after ${i + 1} polls`, {
-          userId: session.user.id,
-          role: role || null,
-          email: session.user.email
-        })
         const isDuplicate = await checkDuplicateEmail(session)
         if (isDuplicate) return
         status.value = 'success'
         setTimeout(() => {
-          const target = role ? '/' : 'role-picker'
-          console.log('[VerifyEmail]', 'Redirecting to:', target)
-          router.replace(role ? '/' : { name: 'role-picker' })
+          const redirect = sessionStorage.getItem('redirectAfterLogin')
+          sessionStorage.removeItem('redirectAfterLogin')
+          router.replace(redirect || (role ? '/' : { name: 'role-picker' }))
         }, 500)
         return
       }
     }
-    console.log('[VerifyEmail]', 'Polling timed out — no session after 3s')
     status.value = 'error'
     errorMsg.value = 'Login gagal. Silakan coba lagi.'
     return
   }
 
   if (code) {
-    console.log('[VerifyEmail]', 'Exchanging code for session...', { type: route.query.type })
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (error) {
-      console.log('[VerifyEmail]', 'Code exchange failed', { error: error.message })
       status.value = 'error'
       errorMsg.value = error.message
       return
     }
 
-    console.log('[VerifyEmail]', 'Code exchange succeeded')
-    status.value = 'success'
+    const session = data.session
+    let role = session?.user?.user_metadata?.role
 
-    const type = route.query.type as string
-    if (type === 'recovery') {
-      console.log('[VerifyEmail]', 'Recovery flow — redirecting to /reset-password')
-      setTimeout(() => router.push({ name: 'reset-password' }), 1500)
+    if (route.query.type === 'recovery') {
+      router.replace({ name: 'reset-password' })
       return
     }
 
-    const { data: { user } } = await supabase.auth.getUser()
-    const role = user?.user_metadata?.role
-    console.log('[VerifyEmail]', 'User after exchange', { userId: user?.id, role: role || null })
-    const { data: { session: postSession } } = await supabase.auth.getSession()
-    if (postSession) {
-      const isDuplicate = await checkDuplicateEmail(postSession)
-      if (isDuplicate) return
-    }
-    setTimeout(() => {
-      const target = role ? '/' : 'role-picker'
-      console.log('[VerifyEmail]', 'Redirecting to:', target)
-      router.replace(role ? '/' : { name: 'role-picker' })
-    }, 1500)
-    return
-  }
-
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session) {
-    const role = session.user.user_metadata?.role
-    console.log('[VerifyEmail]', 'Already has session', { userId: session.user.id, role: role || null })
     status.value = 'success'
+
+    const isDuplicate = await checkDuplicateEmail(session)
+    if (isDuplicate) return
+
+    role = session?.user?.user_metadata?.role
+
     setTimeout(() => {
-      const target = role ? '/' : 'role-picker'
-      console.log('[VerifyEmail]', 'Redirecting to:', target)
-      router.replace(role ? '/' : { name: 'role-picker' })
+      const redirect = sessionStorage.getItem('redirectAfterLogin')
+      sessionStorage.removeItem('redirectAfterLogin')
+      router.replace(redirect || (role ? '/' : { name: 'role-picker' }))
     }, 500)
     return
   }
 
-  console.log('[VerifyEmail]', 'No code, no hash, no session — showing error')
   status.value = 'error'
   errorMsg.value = 'Kode verifikasi tidak ditemukan'
 })
@@ -126,11 +106,7 @@ onMounted(async () => {
   <div class="min-h-screen bg-surface flex items-center justify-center px-6">
     <div class="w-full max-w-sm text-center">
 
-      <div v-if="status === 'loading'">
-        <span class="material-symbols-outlined text-5xl text-primary mb-4 animate-pulse">sync</span>
-        <h1 class="text-2xl font-heading font-bold text-text-heading mb-2">Memverifikasi...</h1>
-        <p class="text-sm text-text-muted">Tunggu sebentar, kami sedang memverifikasi akun kamu.</p>
-      </div>
+      <SkeletonPage v-if="status === 'loading'" type="form" />
 
       <div v-else-if="status === 'success'">
         <span class="material-symbols-outlined text-5xl text-success mb-4">check_circle</span>

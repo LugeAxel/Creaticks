@@ -1,8 +1,26 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { fetchWithoutAuth } from '@/lib/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 
 const router = useRouter()
+
+const globalStats = ref<{
+  recent_sales_1h: number
+  total_sold: number
+  checked_in_count: number
+  event_count: number
+} | null>(null)
+
+onMounted(async () => {
+  try {
+    const res = await fetchWithoutAuth('/api/stats')
+    if (res.ok) globalStats.value = await res.json()
+  } catch {
+    // silently fail
+  }
+})
 </script>
 
 <template>
@@ -48,6 +66,32 @@ const router = useRouter()
           <span class="material-symbols-outlined text-3xl text-primary mb-4">payments</span>
           <h3 class="font-heading font-bold text-lg text-text-heading mb-2">Pembayaran Mudah</h3>
           <p class="text-sm text-text-muted leading-relaxed">Terima pembayaran via transfer bank. Upload bukti dan verifikasi otomatis.</p>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="globalStats" class="px-6 py-16 max-w-6xl mx-auto">
+      <h2 class="text-2xl font-heading font-bold text-text-heading text-center mb-10">Statistik Platform</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div class="bg-surface-card rounded-2xl border border-border p-6 text-center">
+          <span class="material-symbols-outlined text-3xl text-primary mb-2">confirmation_number</span>
+          <p class="text-3xl font-bold text-text-heading">{{ globalStats.total_sold.toLocaleString('id-ID') }}</p>
+          <p class="text-sm text-text-muted mt-1">Total Tiket Terjual</p>
+        </div>
+        <div class="bg-surface-card rounded-2xl border border-border p-6 text-center">
+          <span class="material-symbols-outlined text-3xl text-warning mb-2">bolt</span>
+          <p class="text-3xl font-bold text-text-heading">{{ globalStats.recent_sales_1h.toLocaleString('id-ID') }}</p>
+          <p class="text-sm text-text-muted mt-1">Terjual 1 Jam</p>
+        </div>
+        <div class="bg-surface-card rounded-2xl border border-border p-6 text-center">
+          <span class="material-symbols-outlined text-3xl text-success mb-2">groups</span>
+          <p class="text-3xl font-bold text-text-heading">{{ globalStats.checked_in_count.toLocaleString('id-ID') }}</p>
+          <p class="text-sm text-text-muted mt-1">Penonton Hadir</p>
+        </div>
+        <div class="bg-surface-card rounded-2xl border border-border p-6 text-center">
+          <span class="material-symbols-outlined text-3xl text-primary mb-2">event</span>
+          <p class="text-3xl font-bold text-text-heading">{{ globalStats.event_count.toLocaleString('id-ID') }}</p>
+          <p class="text-sm text-text-muted mt-1">Acara Aktif</p>
         </div>
       </div>
     </section>

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useEventContext } from '@/composables/useEventContext'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 interface Attendee {
   id: string
@@ -135,9 +136,7 @@ onUnmounted(() => {
   <div class="p-4 md:p-6 max-w-screen-lg mx-auto">
     <h1 class="text-xl font-heading font-bold text-text-heading mb-6">Kehadiran</h1>
 
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-    </div>
+    <SkeletonPage v-if="loading" type="list" />
 
     <template v-else>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

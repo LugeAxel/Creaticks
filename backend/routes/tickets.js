@@ -28,7 +28,7 @@ router.get('/', requireAuth, async (req, res) => {
     .from('ticket_requests')
     .select(`
       *,
-      events!inner(title, date, location, banner_url)
+      events!inner(title, date, location, banner_url, category)
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -56,6 +56,7 @@ router.get('/', requireAuth, async (req, res) => {
     event_name: t.events?.title || '',
     event_date: t.events?.date || '',
     event_location: t.events?.location || '',
+    event_category: t.events?.category || '',
     tier_name: t.tier_name || 'Regular',
     status: t.status || 'pending',
     qr_data: t.id,
@@ -67,6 +68,34 @@ router.get('/', requireAuth, async (req, res) => {
 
 router.post('/', requireAuth, async (req, res) => {
   const { event_id, items, seat_ids } = req.body
+  const io = req.app.get('io')
+
+  // Release any session-based seat locks on failure (so seats don't
+  // stay stuck in "reserved" state when the request fails validation)
+  async function releaseSessionLocks() {
+    if (!seat_ids || !Array.isArray(seat_ids) || seat_ids.length === 0) return
+    try {
+      const { data: locked } = await supabaseAdmin
+        .from('venue_seats')
+        .select('id, reserved_by')
+        .in('id', seat_ids)
+      if (!locked) return
+      const toRelease = locked.filter(s => s.reserved_by?.startsWith('session_')).map(s => s.id)
+      if (toRelease.length === 0) return
+      await supabaseAdmin
+        .from('venue_seats')
+        .update({ status: 'available', reserved_by: null, reserved_until: null })
+        .in('id', toRelease)
+        .eq('status', 'reserved')
+      if (io) {
+        toRelease.forEach(seatId => {
+          io.to(`event:${event_id}:seats`).emit('SEAT_UPDATE', { seatId, status: 'available', reservedUntil: null })
+        })
+      }
+    } catch (e) {
+      logger.error('TICKETS-CREATE', 'Failed to release session locks', { requestId: req.requestId, error: e?.message || String(e) })
+    }
+  }
 
   if (!event_id) {
     return res.status(400).json({ error: 'event_id wajib diisi' })
@@ -86,10 +115,12 @@ router.post('/', requireAuth, async (req, res) => {
       .eq('event_id', event_id)
 
     if (seatCheckError) {
+      await releaseSessionLocks()
       return res.status(500).json({ error: 'Gagal memvalidasi kursi' })
     }
 
     if (!seatCheck || seatCheck.length !== seat_ids.length) {
+      await releaseSessionLocks()
       return res.status(400).json({ error: 'Beberapa kursi tidak ditemukan', code: 'SEAT_INVALID' })
     }
 
@@ -98,6 +129,7 @@ router.post('/', requireAuth, async (req, res) => {
     )
 
     if (unavailableSeats.length > 0) {
+      await releaseSessionLocks()
       return res.status(409).json({
         error: `${unavailableSeats.length} kursi sudah tidak tersedia`,
         code: 'SEAT_UNAVAILABLE',
@@ -113,10 +145,12 @@ router.post('/', requireAuth, async (req, res) => {
     .single()
 
   if (eventError || !event) {
+    await releaseSessionLocks()
     return res.status(404).json({ error: 'Acara tidak ditemukan' })
   }
 
   if (event.creator_id === req.user.id) {
+    await releaseSessionLocks()
     logger.warn('TICKETS-CREATE', 'Creator tried to request own ticket', {
       requestId: req.requestId,
       userId: req.user.id,
@@ -126,6 +160,7 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   if (event.status !== 'published') {
+    await releaseSessionLocks()
     return res.status(400).json({
       error: 'Acara belum dipublikasikan atau sudah tidak aktif',
       code: 'EVENT_NOT_ACTIVE'
@@ -133,6 +168,7 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   if (new Date(event.date) < new Date()) {
+    await releaseSessionLocks()
     return res.status(400).json({
       error: 'Acara sudah berlalu, tidak bisa memesan tiket',
       code: 'EVENT_NOT_ACTIVE'
@@ -148,6 +184,7 @@ router.post('/', requireAuth, async (req, res) => {
     .limit(1)
 
   if (pendingRequestsError) {
+    await releaseSessionLocks()
     logger.error('TICKETS-CREATE', 'Failed to check existing requests', {
       requestId: req.requestId,
       userId: req.user.id,
@@ -158,6 +195,7 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   if (pendingRequests && pendingRequests.length > 0) {
+    await releaseSessionLocks()
     return res.status(409).json({
       error: 'Kamu sudah memiliki permintaan tiket menunggu pembayaran untuk acara ini',
       code: 'ACTIVE_TICKET_REQUEST_EXISTS'
@@ -172,6 +210,7 @@ router.post('/', requireAuth, async (req, res) => {
     .in('name', tierNames)
 
   if (tiersError || !tiers || tiers.length === 0) {
+    await releaseSessionLocks()
     return res.status(400).json({ error: 'Tiket yang dipilih tidak tersedia' })
   }
 
@@ -179,6 +218,7 @@ router.post('/', requireAuth, async (req, res) => {
 
   const invalidItems = items.filter(i => !tierMap[i.tier_name])
   if (invalidItems.length > 0) {
+    await releaseSessionLocks()
     return res.status(400).json({
       error: `Tiket tidak ditemukan: ${invalidItems.map(i => i.tier_name).join(', ')}`
     })
@@ -189,6 +229,7 @@ router.post('/', requireAuth, async (req, res) => {
   const seatTierItems = items.filter(i => tierMap[i.tier_name]?.seat_tier)
   if (seatTierItems.length > 0) {
     if (!seat_ids || !Array.isArray(seat_ids) || seat_ids.length === 0) {
+      await releaseSessionLocks()
       return res.status(400).json({
         error: 'Tiket kursi wajib memilih kursi',
         code: 'SEAT_REQUIRED'
@@ -197,6 +238,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     const expectedSeatCount = seatTierItems.reduce((sum, i) => sum + (i.quantity || 1), 0)
     if (seat_ids.length !== expectedSeatCount) {
+      await releaseSessionLocks()
       return res.status(400).json({
         error: `Jumlah kursi (${seat_ids.length}) tidak sesuai dengan jumlah tiket (${expectedSeatCount})`,
         code: 'SEAT_COUNT_MISMATCH'
@@ -225,6 +267,7 @@ router.post('/', requireAuth, async (req, res) => {
         const expectedTierId = tierIdSequence[i]
         const seat = seatTierCheck.find(s => s.id === sid)
         if (seat && seat.tier_id !== expectedTierId) {
+          await releaseSessionLocks()
           return res.status(400).json({
             error: `Kursi ${seat.seat_code || sid} bukan milik tipe tiket yang dipilih`,
             code: 'SEAT_TIER_MISMATCH'
@@ -254,12 +297,15 @@ router.post('/', requireAuth, async (req, res) => {
           // Map known DB exceptions to user-friendly responses
           const msg = (rpcErr.message || '').toUpperCase()
           if (msg.includes('NOT_ENOUGH_TICKETS')) {
+            await releaseSessionLocks()
             return res.status(409).json({ error: `Tiket ${item.tier_name} tidak mencukupi`, code: 'NOT_ENOUGH_TICKETS' })
           }
           if (msg.includes('TIER_NOT_FOUND')) {
+            await releaseSessionLocks()
             return res.status(400).json({ error: `Tipe tiket ${item.tier_name} tidak ditemukan` })
           }
           logger.error('TICKETS-CREATE', 'RPC error', { requestId: req.requestId, error: rpcErr.message })
+          await releaseSessionLocks()
           return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
         }
 
@@ -270,11 +316,13 @@ router.post('/', requireAuth, async (req, res) => {
           created.push(reserved)
         }
       } catch (e) {
+        await releaseSessionLocks()
         logger.error('TICKETS-CREATE', 'Reserve RPC failed', { requestId: req.requestId, error: e?.message || String(e) })
         return res.status(500).json({ error: 'Gagal membuat permintaan tiket' })
       }
     }
   } catch (err) {
+    await releaseSessionLocks()
     if (err && err.status && err.body) {
       return res.status(err.status).json(err.body)
     }
@@ -331,7 +379,6 @@ router.post('/', requireAuth, async (req, res) => {
     email: requesterUser?.user?.email || ''
   }
 
-  const io = req.app.get('io')
   if (io) {
     created.forEach(t => {
       io.to(`event:${event_id}:queue`).emit('queue:new', {
@@ -415,7 +462,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     .from('ticket_requests')
     .select(`
       *,
-      events!inner(title, date, location, banner_url)
+      events!inner(title, date, location, banner_url, location_lat, location_lng, category, gallery_urls)
     `)
     .eq('id', id)
     .single()
@@ -449,9 +496,15 @@ router.get('/:id', requireAuth, async (req, res) => {
     event_date: ticket.events?.date || '',
     event_location: ticket.events?.location || '',
     event_banner: ticket.events?.banner_url || '',
+    event_category: ticket.events?.category || '',
+    event_location_lat: ticket.events?.location_lat || null,
+    event_location_lng: ticket.events?.location_lng || null,
+    event_gallery_urls: ticket.events?.gallery_urls || [],
     holder_name: holderName,
     tier_name: ticket.tier_name || 'Regular',
     status: ticket.status,
+    is_checked_in: ticket.is_checked_in || false,
+    checked_in_at: ticket.checked_in_at || null,
     qr_data: ticket.id,
     thread_id: thread?.id || null
   }
@@ -806,6 +859,11 @@ router.patch('/:id/claim', requireAuth, async (req, res) => {
 
 router.patch('/:id/validate', requireAuth, async (req, res) => {
   const { id } = req.params
+  const { event_id, scan_secret } = req.body
+
+  if (!event_id) {
+    return res.status(400).json({ error: 'event_id wajib dikirim' })
+  }
 
   const { data: ticket, error: fetchError } = await supabaseAdmin
     .from('ticket_requests')
@@ -818,6 +876,22 @@ router.patch('/:id/validate', requireAuth, async (req, res) => {
 
   if (fetchError || !ticket) {
     return res.status(404).json({ error: 'Tiket tidak ditemukan' })
+  }
+
+  if (ticket.event_id !== event_id) {
+    return res.status(400).json({ error: 'Tiket bukan untuk acara ini' })
+  }
+
+  if (scan_secret) {
+    const { data: ev } = await supabaseAdmin
+      .from('events')
+      .select('scan_secret')
+      .eq('id', event_id)
+      .single()
+
+    if (!ev || ev.scan_secret !== scan_secret) {
+      return res.status(403).json({ error: 'Kunci scanner tidak valid' })
+    }
   }
 
   if (ticket.status !== 'confirmed') {
@@ -884,6 +958,84 @@ router.patch('/:id/validate', requireAuth, async (req, res) => {
       holder_name: holderName,
       tier_name: ticket.tier_name,
       event_title: ticket.events.title
+    }
+  })
+})
+
+router.get('/:id/identify', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const { event_id, scan_secret } = req.query
+
+  if (!event_id) {
+    return res.status(400).json({ error: 'event_id wajib dikirim' })
+  }
+
+  const { data: ticket, error: fetchError } = await supabaseAdmin
+    .from('ticket_requests')
+    .select(`
+      *,
+      events!inner(id, title, creator_id)
+    `)
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !ticket) {
+    return res.status(404).json({ error: 'Tiket tidak ditemukan' })
+  }
+
+  if (ticket.event_id !== event_id) {
+    return res.status(400).json({ error: 'Tiket bukan untuk acara ini' })
+  }
+
+  if (scan_secret) {
+    const { data: ev } = await supabaseAdmin
+      .from('events')
+      .select('scan_secret')
+      .eq('id', event_id)
+      .single()
+
+    if (!ev || ev.scan_secret !== scan_secret) {
+      return res.status(403).json({ error: 'Kunci scanner tidak valid' })
+    }
+  }
+
+  let holderName = 'Unknown'
+  let holderEmail = ''
+  try {
+    const { data: user } = await supabaseAdmin.auth.admin.getUserById(ticket.user_id)
+    if (user?.user) {
+      holderName = user.user.user_metadata?.name || user.user.email?.split('@')[0] || 'Unknown'
+      holderEmail = user.user.email || ''
+    }
+  } catch {
+    holderName = 'Unknown'
+  }
+
+  let seatInfo = null
+  const { data: seat } = await supabaseAdmin
+    .from('venue_seats')
+    .select('seat_code, tier_id, status')
+    .eq('reserved_by', id)
+    .maybeSingle()
+  if (seat) seatInfo = seat
+
+  logger.info('TICKETS-IDENTIFY', 'Ticket identified', {
+    requestId: req.requestId,
+    ticketId: id,
+    userId: req.user.id
+  })
+
+  res.json({
+    ticket: {
+      id: ticket.id,
+      event_title: ticket.events.title,
+      holder_name: holderName,
+      holder_email: holderEmail,
+      tier_name: ticket.tier_name || 'Regular',
+      status: ticket.status,
+      is_checked_in: ticket.is_checked_in || false,
+      checked_in_at: ticket.checked_in_at || null,
+      seat: seatInfo
     }
   })
 })

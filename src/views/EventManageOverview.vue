@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEventContext } from '@/composables/useEventContext'
 import { supabase } from '@/lib/supabase'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const router = useRouter()
 const { event, resolvedRole } = useEventContext()
@@ -47,9 +48,7 @@ onMounted(async () => {
       <p class="text-sm text-text-muted mt-1">{{ formatDate(event.date) }}</p>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-12">
-      <span class="material-symbols-outlined text-3xl text-primary animate-spin">sync</span>
-    </div>
+    <SkeletonPage v-if="loading" type="stats" />
 
     <div v-else class="space-y-6">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">

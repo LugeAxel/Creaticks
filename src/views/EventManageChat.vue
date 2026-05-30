@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 import { useEventContext } from '@/composables/useEventContext'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 interface Thread {
   id: string
@@ -81,6 +82,15 @@ const openThread = async (thread: Thread) => {
     const data = await res.json()
     messages.value = data.messages || []
   }
+
+  // Mark thread as read
+  if (token) {
+    await fetch(`/api/chat/thread/${thread.id}/read`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+  }
+  thread.unread_count = 0
 
   await nextTick()
   const container = document.querySelector('.messages-container')
@@ -289,9 +299,7 @@ onUnmounted(() => {
           <h2 class="font-heading font-bold text-text-heading">Chat</h2>
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-10">
-          <span class="material-symbols-outlined text-3xl text-primary animate-spin">sync</span>
-        </div>
+        <SkeletonPage v-if="loading" type="chat" />
 
         <div v-else-if="threads.length === 0" class="text-center py-10 px-4">
           <span class="material-symbols-outlined text-4xl text-text-muted mb-3">chat</span>

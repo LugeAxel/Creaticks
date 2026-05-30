@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{
-  variant?: 'primary' | 'accent' | 'secondary' | 'outline' | 'ghost'
+  variant?: 'primary' | 'accent' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'danger-ghost'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   disabled?: boolean
@@ -25,6 +25,8 @@ defineEmits<{
       variant === 'accent' ? 'bg-accent text-white hover:bg-accent-light active:bg-accent-dark' :
       variant === 'outline' ? 'border-2 border-primary text-primary bg-transparent hover:bg-primary hover:text-white' :
       variant === 'ghost' ? 'text-primary bg-transparent hover:bg-primary/10' :
+      variant === 'danger' ? 'bg-error text-white hover:bg-error/90 active:bg-error/80' :
+      variant === 'danger-ghost' ? 'text-error bg-transparent hover:bg-error/10' :
       'bg-primary text-white hover:bg-primary-light active:bg-primary-dark'
     ]"
     @click="$emit('click', $event)"

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BackButton from '@/components/shared/BackButton.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 interface Attendee {
   id: string
@@ -143,9 +144,7 @@ onUnmounted(() => {
           <h1 class="text-xl font-heading font-bold text-text-heading">Kehadiran</h1>
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-20">
-          <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-        </div>
+        <SkeletonPage v-if="loading" type="list" />
 
         <template v-else>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

@@ -5,7 +5,7 @@ const joinedRooms = new Set<string>()
 
 export function getSocket() {
   if (socket) return socket
-  const url = import.meta.env.VITE_API_URL || 'http://localhost:2301'
+  const url = import.meta.env.VITE_API_URL
   socket = io(url, { autoConnect: true })
 
   socket.on('connect_error', (err) => {

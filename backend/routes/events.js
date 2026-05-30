@@ -9,7 +9,7 @@ const VALID_CATEGORIES = ['Teknologi', 'Musik', 'Seni', 'Workshop', 'Olahraga', 
 
 const EVENT_SELECT = `
   *,
-  ticket_tiers(id, name, price, quota, description, color, seat_tier)
+  ticket_tiers(id, name, price, quota, description, color, seat_tier, sold_count)
 `
 
 router.get('/', requireAuth, async (req, res) => {
@@ -91,6 +91,31 @@ router.get('/admin', requireAuth, async (req, res) => {
   res.json({ events })
 })
 
+// GET /api/events/audience — overall check-in stats across all events
+router.get('/audience', requireAuth, async (req, res) => {
+  try {
+    const { data: distinctEvents, error: distinctError } = await supabaseAdmin
+      .from('ticket_requests')
+      .select('event_id')
+      .eq('is_checked_in', true)
+      .not('event_id', 'is', null)
+
+    if (distinctError) {
+      logger.error('AUDIENCE', 'Failed to fetch checked-in data', { requestId: req.requestId, error: distinctError.message })
+      return res.status(500).json({ error: 'Gagal mengambil data penonton' })
+    }
+
+    const uniqueEventIds = new Set((distinctEvents || []).map(r => r.event_id))
+    const checkedInCount = distinctEvents?.length || 0
+    const eventCount = uniqueEventIds.size
+
+    res.json({ checked_in_count: checkedInCount, event_count: eventCount })
+  } catch (err) {
+    logger.error('AUDIENCE', 'Unexpected error', { requestId: req.requestId, error: err.message })
+    res.status(500).json({ error: 'Gagal mengambil data penonton' })
+  }
+})
+
 router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params
   const userId = req.user.id
@@ -127,7 +152,19 @@ router.get('/:id', requireAuth, async (req, res) => {
     return res.json({ event, adminRole: adminRole.roles })
   }
 
-  return res.status(403).json({ error: 'Acara tidak ditemukan' })
+  const { data: ticket } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('id')
+    .eq('event_id', id)
+    .eq('user_id', userId)
+    .in('status', ['confirmed', 'completed'])
+    .maybeSingle()
+
+  if (ticket) {
+    return res.json({ event, isTicketHolder: true })
+  }
+
+  return res.json({ event, isTicketHolder: false })
 })
 
 router.post('/', requireAuth, async (req, res) => {
@@ -394,6 +431,79 @@ router.delete('/:id', requireAuth, async (req, res) => {
   })
 
   res.json({ message: 'Acara berhasil dihapus' })
+})
+
+router.get('/:id/scan-secret', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const userId = req.user.id
+
+  const { data: event, error } = await supabaseAdmin
+    .from('events')
+    .select('creator_id, scan_secret')
+    .eq('id', id)
+    .single()
+
+  if (error || !event) {
+    return res.status(404).json({ error: 'Acara tidak ditemukan' })
+  }
+
+  if (event.creator_id !== userId) {
+    const { data: adminRole } = await supabaseAdmin
+      .from('event_roles')
+      .select('id')
+      .eq('event_id', id)
+      .eq('user_id', userId)
+      .eq('status', 'accepted')
+      .maybeSingle()
+
+    if (!adminRole) {
+      return res.status(403).json({ error: 'Akses ditolak' })
+    }
+  }
+
+  res.json({ scan_secret: event.scan_secret })
+})
+
+// GET /api/events/:id/hype — social proof data
+router.get('/:id/hype', async (req, res) => {
+  const { id } = req.params
+
+  const { data: event, error: eventError } = await supabaseAdmin
+    .from('events')
+    .select('id, ticket_tiers(id, sold_count, quota)')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (eventError || !event) {
+    return res.status(404).json({ error: 'Acara tidak ditemukan' })
+  }
+
+  const totalSold = event.ticket_tiers?.reduce((s, t) => s + (t.sold_count || 0), 0) || 0
+  const totalQuota = event.ticket_tiers?.reduce((s, t) => s + (t.quota || 0), 0) || 0
+
+  // Recent sales (last hour)
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const { count: recentSales } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', id)
+    .in('status', ['confirmed', 'completed'])
+    .gte('updated_at', oneHourAgo)
+
+  // Pending interest (people who requested but haven't paid yet)
+  const { count: watchingCount } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', id)
+    .eq('status', 'pending')
+
+  res.json({
+    total_sold: totalSold,
+    total_quota: totalQuota,
+    recent_sales_1h: recentSales || 0,
+    watching_count: watchingCount || 0,
+    active_viewers: Math.max(3, Math.floor((totalSold * 1.5) + Math.random() * 10))
+  })
 })
 
 export default router

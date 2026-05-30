@@ -5,6 +5,7 @@ import { useInvitations } from '@/composables/useInvitations'
 import { useToast } from '@/composables/useToast'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
+import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const router = useRouter()
 const { showToast } = useToast()
@@ -125,9 +126,7 @@ onMounted(() => {
         </button>
       </div>
 
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <span class="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-      </div>
+      <SkeletonPage v-if="loading" type="admin-list" />
 
       <div v-else-if="filteredInvitations.length === 0" class="text-center py-16">
         <span class="material-symbols-outlined text-5xl text-outline mb-4">how_to_reg</span>
