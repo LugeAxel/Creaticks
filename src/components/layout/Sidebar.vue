@@ -19,13 +19,13 @@ const navItems = computed(() => {
   if (!props.user) {
     return [
       { name: 'Beranda', icon: 'home', route: '/' },
-      { name: 'Cari Acara', icon: 'event', route: '/acara' }
+      { name: 'Cari Acara', icon: 'search', route: '/acara' }
     ]
   }
 
   const items: Array<{ name: string; icon: string; route: string }> = [
     { name: 'Beranda', icon: 'dashboard', route: '/dashboard' },
-    { name: 'Cari Acara', icon: 'event', route: '/acara' },
+    { name: 'Cari Acara', icon: 'search', route: '/acara' },
     { name: 'Tiket Saya', icon: 'confirmation_number', route: '/tickets' },
     { name: 'Pesan', icon: 'chat', route: '/chat' }
   ]

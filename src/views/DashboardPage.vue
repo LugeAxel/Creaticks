@@ -185,7 +185,7 @@ onMounted(async () => {
         </div>
 
         <!-- Creator Banner -->
-        <div v-if="isCreator" class="bg-gradient-to-r from-primary/10 to-accent/10 rounded-2xl border border-primary/20 p-5">
+        <div v-if="isCreator" class="bg-gradient-to-r from-primary/10 to-accent/40 rounded-2xl border border-primary/20 p-5">
           <div class="flex items-center justify-between gap-4">
             <div class="flex items-center gap-3">
               <span class="material-symbols-outlined text-3xl text-primary">palette</span>
@@ -194,7 +194,7 @@ onMounted(async () => {
                 <p class="text-sm text-text-heading/50">Kelola acara dan pantau performa Anda</p>
               </div>
             </div>
-            <BaseButton variant="accent" size="sm" @click="router.push('/creator')">
+            <BaseButton variant="accent" size="sm" @click="router.push('/creator')" class="bg-gradient-to-r from-primary to-[#4A3FD4] text-white">
               Dashboard Kreator
             </BaseButton>
           </div>
@@ -229,6 +229,13 @@ onMounted(async () => {
           >
             <span class="material-symbols-outlined text-lg text-text-heading/50">add_circle</span>
             Buat Acara
+          </button>
+          <button v-if="isCreator"
+            class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
+            @click="router.push({ name: 'my-events' })"
+          >
+            <span class="material-symbols-outlined text-lg text-text-heading/50">event</span>
+            Acara saya
           </button>
         </div>
 

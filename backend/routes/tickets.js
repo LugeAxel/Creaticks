@@ -954,13 +954,14 @@ router.patch('/:id/claim', requireAuth, async (req, res) => {
           .single()
 
         if (eventSettings?.claim_message_template_enabled && eventSettings?.claim_message_template) {
+          const personalized = eventSettings.claim_message_template.replace(/\{admin\}/g, adminName)
           await supabaseAdmin
             .from('chat_messages')
             .insert({
               thread_id: threadId,
               sender_id: req.user.id,
               message_type: 'text',
-              content: eventSettings.claim_message_template
+              content: personalized
             })
         } else {
           const sysMessage = `Admin ${adminName} mengambil alih penanganan. Silakan kirim bukti transfer jika belum.`

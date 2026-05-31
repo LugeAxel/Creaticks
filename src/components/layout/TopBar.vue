@@ -46,7 +46,7 @@ const getInitial = (u: User | null | undefined) => {
 </script>
 
 <template>
-  <header class="bg-surface flex justify-between items-center w-full px-4 md:px-6 h-16 sticky top-0 z-40 border-b border-border/50">
+  <header class="bg-surface/90 flex justify-between items-center w-full px-4 md:px-6 h-16 sticky top-0 z-40 border-b backdrop:blur(24px) -webkit-backdrop-filter: blur(24px); border-border/90">
     <div class="flex items-center gap-3">
       <img src="/textcreatick.png" alt="Creaticks" class="h-8 md:hidden" />
     </div>

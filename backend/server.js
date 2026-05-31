@@ -419,6 +419,71 @@ const main = async () => {
     } catch (e) {
       logger.error('CRON-QUEUE-CLEAN', 'Unexpected error', { error: e?.message || String(e) })
     }
+
+    // 4. Auto-close confirmed tickets after configurable timeout
+    try {
+      const { data: confirmedTickets, error: confirmErr } = await supabaseAdmin
+        .from('ticket_requests')
+        .select('id, event_id, confirmed_at, events!inner(auto_close_ticket_enabled, auto_close_ticket_timeout)')
+        .eq('status', 'confirmed')
+        .not('confirmed_at', 'is', null)
+
+      if (confirmErr) {
+        logger.error('CRON-AUTOCLOSE', 'Failed to fetch confirmed tickets', { error: confirmErr.message })
+      } else if (confirmedTickets && confirmedTickets.length > 0) {
+        const now = Date.now()
+        for (const req of confirmedTickets) {
+          const settings = req.events
+          if (!settings || !settings.auto_close_ticket_enabled) continue
+
+          const timeoutMins = Number(settings.auto_close_ticket_timeout) || 1440
+          const timeoutMs = timeoutMins * 60 * 1000
+          const confirmedTime = new Date(req.confirmed_at).getTime()
+
+          if (now - confirmedTime > timeoutMs) {
+            const { error: updateError } = await supabaseAdmin
+              .from('ticket_requests')
+              .update({ status: 'completed' })
+              .eq('id', req.id)
+
+            if (updateError) {
+              logger.error('CRON-AUTOCLOSE', `Failed to close ticket ${req.id}`, { error: updateError.message })
+            } else {
+              logger.info('CRON-AUTOCLOSE', `Auto-closed ticket ${req.id} after ${timeoutMins} min`)
+
+              // Close chat thread
+              try {
+                const { data: thread } = await supabaseAdmin
+                  .from('chat_threads')
+                  .select('id')
+                  .eq('ticket_request_id', req.id)
+                  .maybeSingle()
+
+                if (thread) {
+                  await supabaseAdmin.from('chat_messages').insert({
+                    thread_id: thread.id,
+                    sender_id: req.event_id,
+                    message_type: 'system',
+                    content: `Tiket ditutup otomatis karena sudah melebihi ${timeoutMins} menit sejak dikonfirmasi.`
+                  })
+
+                  await supabaseAdmin
+                    .from('chat_threads')
+                    .update({ is_active: false })
+                    .eq('id', thread.id)
+                }
+              } catch (chatErr) {
+                logger.error('CRON-AUTOCLOSE', 'Failed to post auto-close chat message', { error: chatErr.message })
+              }
+
+              io.to(`event:${req.event_id}:queue`).emit('queue:status_changed', { id: req.id, status: 'completed' })
+            }
+          }
+        }
+      }
+    } catch (e) {
+      logger.error('CRON-AUTOCLOSE', 'Unexpected error', { error: e?.message || String(e) })
+    }
   })
 
   server.listen(PORT, () => {

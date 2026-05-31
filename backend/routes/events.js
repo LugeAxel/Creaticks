@@ -398,6 +398,8 @@ router.put('/:id', requireAuth, async (req, res) => {
   if (req.body.claim_message_template !== undefined) updates.claim_message_template = req.body.claim_message_template
   if (req.body.auto_release_claims_enabled !== undefined) updates.auto_release_claims_enabled = req.body.auto_release_claims_enabled
   if (req.body.auto_release_claims_timeout !== undefined) updates.auto_release_claims_timeout = Number(req.body.auto_release_claims_timeout)
+  if (req.body.auto_close_ticket_enabled !== undefined) updates.auto_close_ticket_enabled = req.body.auto_close_ticket_enabled
+  if (req.body.auto_close_ticket_timeout !== undefined) updates.auto_close_ticket_timeout = Number(req.body.auto_close_ticket_timeout)
   updates.updated_at = new Date().toISOString()
 
   const { data: event, error } = await supabaseAdmin
