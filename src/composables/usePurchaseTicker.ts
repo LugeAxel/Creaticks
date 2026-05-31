@@ -1,5 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue'
-import { getSocket, onEvent, offEvent } from '@/lib/socket'
+import { onEvent, offEvent } from '@/lib/socket'
 import { fetchWithoutAuth } from '@/lib/api'
 
 export interface Purchase {
@@ -33,10 +33,7 @@ export function usePurchaseTicker() {
 
   onMounted(() => {
     fetchLatest()
-    const socket = getSocket()
-    if (socket) {
-      onEvent('purchase:new', handleNew)
-    }
+    onEvent('purchase:new', handleNew)
   })
 
   onUnmounted(() => {

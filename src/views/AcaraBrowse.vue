@@ -37,62 +37,51 @@ interface EventItem {
 const events = ref<EventItem[]>([])
 const loading = ref(true)
 const error = ref('')
-const searchRaw = ref('')
+const searchInput = ref('')
 const activeCategory = ref('')
+const currentPage = ref(1)
+const totalEvents = ref(0)
+const pageSize = 8
 
 const categoryOptions = ['Teknologi', 'Musik', 'Seni', 'Workshop', 'Olahraga', 'Bisnis', 'Lainnya']
+
+const totalPages = computed(() => Math.max(1, Math.ceil(totalEvents.value / pageSize)))
 
 const debouncedSearch = ref('')
 const debouncedCategory = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
-let catTimer: ReturnType<typeof setTimeout> | null = null
 
-watch(searchRaw, (v) => {
+watch(searchInput, (v) => {
   if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { debouncedSearch.value = v }, 300)
+  searchTimer = setTimeout(() => {
+    debouncedSearch.value = v
+    currentPage.value = 1
+  }, 300)
 })
 
 watch(activeCategory, (v) => {
-  if (catTimer) clearTimeout(catTimer)
-  catTimer = setTimeout(() => { debouncedCategory.value = v }, 300)
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    debouncedCategory.value = v
+    currentPage.value = 1
+  }, 300)
 })
 
-const filteredEvents = computed(() => {
-  let result = events.value
-  const cat = debouncedCategory.value || activeCategory.value
-  if (cat) {
-    result = result.filter(e => e.category === cat)
-  }
-  const q = (debouncedSearch.value || searchRaw.value).trim().toLowerCase()
-  if (q) {
-    result = result.filter(e =>
-      e.title.toLowerCase().includes(q) ||
-      e.description.toLowerCase().includes(q) ||
-      e.location.toLowerCase().includes(q)
-    )
-  }
-  return result
-})
-
-const reload = () => {
-  window.location.reload()
-}
-
-let eventsChannel: ReturnType<typeof supabase.channel> | null = null
-
-const addOrUpdateEvent = (event: EventItem) => {
-  const idx = events.value.findIndex(e => e.id === event.id)
-  if (idx !== -1) {
-    events.value[idx] = event
-  } else {
-    events.value.unshift(event)
-  }
-}
-
-onMounted(async () => {
+async function fetchEvents() {
+  loading.value = true
+  error.value = ''
   try {
-    const res = await fetch('/api/events/published')
+    const params = new URLSearchParams({
+      page: String(currentPage.value),
+      limit: String(pageSize)
+    })
+    const q = (debouncedSearch.value || searchInput.value).trim()
+    if (q) params.set('search', q)
+    const cat = debouncedCategory.value || activeCategory.value
+    if (cat) params.set('category', cat)
+
+    const res = await fetch(`/api/events/published?${params}`)
     if (!res.ok) {
       const data = await res.json()
       error.value = data.error || 'Gagal memuat acara'
@@ -100,11 +89,24 @@ onMounted(async () => {
     }
     const data = await res.json()
     events.value = data.events || []
+    totalEvents.value = data.total || 0
   } catch {
     error.value = 'Gagal memuat acara'
   } finally {
     loading.value = false
   }
+}
+
+watch([debouncedSearch, debouncedCategory, currentPage], fetchEvents)
+
+const reload = () => {
+  window.location.reload()
+}
+
+let eventsChannel: ReturnType<typeof supabase.channel> | null = null
+
+onMounted(async () => {
+  await fetchEvents()
 
   eventsChannel = supabase
     .channel('acara_browse_realtime')
@@ -116,10 +118,8 @@ onMounted(async () => {
         table: 'events',
         filter: 'status=eq.published'
       },
-      (payload: any) => {
-        if (payload.new) {
-          addOrUpdateEvent(payload.new as EventItem)
-        }
+      () => {
+        fetchEvents()
       }
     )
     .on(
@@ -130,10 +130,8 @@ onMounted(async () => {
         table: 'events',
         filter: 'status=eq.published'
       },
-      (payload: any) => {
-        if (payload.new) {
-          addOrUpdateEvent(payload.new as EventItem)
-        }
+      () => {
+        fetchEvents()
       }
     )
     .subscribe()
@@ -144,6 +142,30 @@ onUnmounted(() => {
     supabase.removeChannel(eventsChannel)
   }
 })
+
+const paginationRange = computed(() => {
+  const total = totalPages.value
+  const current = currentPage.value
+  const range: (number | string)[] = []
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) range.push(i)
+  } else {
+    range.push(1)
+    if (current > 3) range.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) range.push(i)
+    if (current < total - 2) range.push('...')
+    range.push(total)
+  }
+  return range
+})
+
+function goToPage(page: number | string) {
+  if (typeof page !== 'number') return
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return
+  currentPage.value = page
+}
 </script>
 
 <template>
@@ -157,7 +179,7 @@ onUnmounted(() => {
       <div class="relative mb-5">
         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-text-muted">search</span>
         <input
-          v-model="searchRaw"
+          v-model="searchInput"
           type="text"
           placeholder="Cari acara..."
           class="w-full bg-surface-card border border-border rounded-xl pl-11 pr-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
@@ -190,24 +212,63 @@ onUnmounted(() => {
       <div v-else-if="error" class="text-center py-16">
         <span class="material-symbols-outlined text-5xl text-text-muted mb-4">error_outline</span>
         <p class="text-sm text-text-muted">{{ error }}</p>
-          <BaseButton variant="primary" size="sm" class="mt-4" @click="reload">
+        <BaseButton variant="primary" size="sm" class="mt-4" @click="reload">
           Muat Ulang
         </BaseButton>
       </div>
 
-      <div v-else-if="filteredEvents.length === 0" class="text-center py-16">
+      <div v-else-if="events.length === 0" class="text-center py-16">
         <span class="material-symbols-outlined text-5xl text-text-muted mb-4">event_busy</span>
         <p class="text-sm text-text-muted">
-           {{ searchRaw || activeCategory ? 'Tidak ada acara yang cocok' : 'Belum ada acara tersedia' }}
+          {{ searchInput || activeCategory ? 'Tidak ada acara yang cocok' : 'Belum ada acara tersedia' }}
         </p>
       </div>
 
-      <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <EventCard
-          v-for="event in filteredEvents"
-          :key="event.id"
-          :event="event"
-        />
+      <div v-else>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <EventCard
+            v-for="event in events"
+            :key="event.id"
+            :event="event"
+          />
+        </div>
+
+        <div v-if="totalPages > 1" class="flex items-center justify-center gap-1.5 mt-8">
+          <button
+            type="button"
+            class="flex items-center justify-center w-9 h-9 rounded-lg text-sm font-semibold transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            :class="currentPage === 1 ? 'text-text-muted' : 'text-text hover:bg-surface-variant'"
+            :disabled="currentPage === 1"
+            @click="goToPage(currentPage - 1)"
+          >
+            <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+          </button>
+
+          <button
+            v-for="p in paginationRange"
+            :key="p"
+            type="button"
+            class="flex items-center justify-center min-w-9 h-9 rounded-lg text-sm font-semibold transition-all cursor-pointer"
+            :class="p === currentPage
+              ? 'bg-primary text-white'
+              : p === '...'
+                ? 'text-text-muted cursor-default'
+                : 'text-text hover:bg-surface-variant'"
+            @click="goToPage(p)"
+          >
+            {{ p }}
+          </button>
+
+          <button
+            type="button"
+            class="flex items-center justify-center w-9 h-9 rounded-lg text-sm font-semibold transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            :class="currentPage === totalPages ? 'text-text-muted' : 'text-text hover:bg-surface-variant'"
+            :disabled="currentPage === totalPages"
+            @click="goToPage(currentPage + 1)"
+          >
+            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+          </button>
+        </div>
       </div>
     </div>
   </AppLayout>

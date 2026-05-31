@@ -143,9 +143,10 @@ const router = createRouter({
         { path: 'attendance', name: 'event-manage-attendance', component: () => import('@/views/EventManageAttendance.vue') },
         { path: 'design', name: 'event-manage-design', component: () => import('@/views/EventManageDesign.vue') },
         { path: 'invoices', name: 'event-manage-invoices', component: () => import('@/views/EventManageInvoices.vue') },
-        { path: 'settings', name: 'event-manage-settings', component: () => import('@/components/shared/PlaceholderTab.vue'), props: { title: 'Pengaturan Acara', icon: 'settings' } },
+        { path: 'settings', name: 'event-manage-settings', component: () => import('@/views/EventManageSettings.vue') },
         { path: 'admins', name: 'event-manage-admins', component: () => import('@/views/EventManageAdmins.vue') },
-        { path: 'analytics', name: 'event-manage-analytics', component: () => import('@/components/shared/PlaceholderTab.vue'), props: { title: 'Analitik', icon: 'analytics' } }
+        { path: 'analytics', name: 'event-manage-analytics', component: () => import('@/views/EventManageAnalytics.vue') },
+        { path: 'refunds', name: 'event-manage-refunds', component: () => import('@/views/EventManageRefunds.vue') }
       ]
     },
     {

@@ -41,11 +41,21 @@ const filteredInvoices = computed(() => {
 
   const q = searchQuery.value.toLowerCase().trim()
   if (q) {
-    result = result.filter(inv =>
-      inv.invoice_number.toLowerCase().includes(q) ||
-      inv.buyer_name.toLowerCase().includes(q) ||
-      inv.ticket_type.toLowerCase().includes(q)
-    )
+    result = result.filter(inv => {
+      const paymentDateStr = inv.payment_date
+        ? new Date(inv.payment_date).toLocaleDateString('id-ID')
+        : ''
+      const createdDateStr = new Date(inv.created_at).toLocaleDateString('id-ID')
+      return (
+        inv.invoice_number.toLowerCase().includes(q) ||
+        inv.buyer_name.toLowerCase().includes(q) ||
+        inv.ticket_type.toLowerCase().includes(q) ||
+        (inv.transfer_reference || '').toLowerCase().includes(q) ||
+        (inv.sender_bank || '').toLowerCase().includes(q) ||
+        paymentDateStr.includes(q) ||
+        createdDateStr.includes(q)
+      )
+    })
   }
 
   if (dateFilter.value !== 'all') {

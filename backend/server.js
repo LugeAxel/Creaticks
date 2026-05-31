@@ -110,9 +110,9 @@ const main = async () => {
 
   const authorizeSocket = async (socket) => {
     const authToken = socket.handshake.auth?.token ||
-      (socket.handshake.headers?.authorization || '').toString().startsWith('Bearer ')
+      (socket.handshake.headers?.authorization?.startsWith('Bearer ')
         ? socket.handshake.headers.authorization.split(' ')[1]
-        : null
+        : null)
 
     if (!authToken) {
       return false
@@ -250,28 +250,57 @@ const main = async () => {
     const nowStr = new Date().toISOString()
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
 
-    // 1. Auto-release claimed locks after 15 minutes of inactivity (based on claimed_at)
-    const { data: expiredClaims, error: claimsError } = await supabaseAdmin
+    // 1. Configurable auto-release of claimed queue items
+    const { data: activeClaims, error: claimsError } = await supabaseAdmin
       .from('ticket_requests')
-      .select('id, event_id, claimed_by')
+      .select('id, event_id, claimed_by, claimed_at, events!inner(auto_release_claims_enabled, auto_release_claims_timeout)')
       .eq('status', 'pending')
       .not('claimed_by', 'is', null)
-      .lt('claimed_at', fifteenMinsAgo)
 
     if (claimsError) {
-      logger.error('CRON-CLAIMS', 'Failed to fetch expired claims', { error: claimsError.message })
-    } else if (expiredClaims && expiredClaims.length > 0) {
-      for (const req of expiredClaims) {
-        const { error: updateError } = await supabaseAdmin
-          .from('ticket_requests')
-          .update({ claimed_by: null, claimed_at: null })
-          .eq('id', req.id)
+      logger.error('CRON-CLAIMS', 'Failed to fetch active claims', { error: claimsError.message })
+    } else if (activeClaims && activeClaims.length > 0) {
+      const now = Date.now()
+      for (const req of activeClaims) {
+        const settings = req.events
+        if (!settings || !settings.auto_release_claims_enabled) continue
 
-        if (updateError) {
-          logger.error('CRON-CLAIMS', `Failed to release claim for request ${req.id}`, { error: updateError.message })
-        } else {
-          logger.info('CRON-CLAIMS', `Auto-released claim for request ${req.id} due to 15 min inactivity`)
-          io.to(`event:${req.event_id}:queue`).emit('queue:released', { id: req.id })
+        const timeoutMins = Number(settings.auto_release_claims_timeout) || 15
+        const timeoutMs = timeoutMins * 60 * 1000
+        const claimedTime = new Date(req.claimed_at).getTime()
+
+        if (now - claimedTime > timeoutMs) {
+          const { error: updateError } = await supabaseAdmin
+            .from('ticket_requests')
+            .update({ claimed_by: null, claimed_at: null })
+            .eq('id', req.id)
+
+          if (updateError) {
+            logger.error('CRON-CLAIMS', `Failed to release claim for request ${req.id}`, { error: updateError.message })
+          } else {
+            logger.info('CRON-CLAIMS', `Auto-released claim for request ${req.id} due to ${timeoutMins} min inactivity`)
+            io.to(`event:${req.event_id}:queue`).emit('queue:released', { id: req.id })
+
+            // Post system message in chat
+            try {
+              const { data: thread } = await supabaseAdmin
+                .from('chat_threads')
+                .select('id')
+                .eq('ticket_request_id', req.id)
+                .maybeSingle()
+
+              if (thread) {
+                await supabaseAdmin.from('chat_messages').insert({
+                  thread_id: thread.id,
+                  sender_id: req.claimed_by,
+                  message_type: 'system',
+                  content: `Klaim penanganan dilepas otomatis karena tidak ada aktivitas selama ${timeoutMins} menit.`
+                })
+              }
+            } catch (chatErr) {
+              logger.error('CRON-CLAIMS', 'Failed to post auto-release message', { error: chatErr.message })
+            }
+          }
         }
       }
     }

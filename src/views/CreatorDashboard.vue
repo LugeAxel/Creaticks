@@ -9,7 +9,14 @@ import type { User } from '@supabase/supabase-js'
 
 const router = useRouter()
 const user = ref<User | null>(null)
-const events = ref<any[]>([])
+const stats = ref<{
+  totalEvents: number
+  totalSold: number
+  totalRevenue: number
+  todayScans: number
+  activeEvents: any[]
+  recentActivity: any[]
+} | null>(null)
 const loading = ref(true)
 
 const formatDate = (dateStr: string) => {
@@ -18,24 +25,39 @@ const formatDate = (dateStr: string) => {
   })
 }
 
-const activeEvents = computed(() =>
-  events.value.filter(e => e.status === 'published' || e.status === 'draft')
-)
+const formatCurrency = (amount: number) => {
+  return `Rp ${amount.toLocaleString('id-ID')}`
+}
 
-const totalSold = computed(() => {
-  let count = 0
-  events.value.forEach(e => {
-    if (e.ticket_count) count += e.ticket_count
-  })
-  return count
-})
-const totalRevenue = computed(() => {
-  let rev = 0
-  events.value.forEach(e => {
-    if (e.total_revenue) rev += e.total_revenue
-  })
-  return rev
-})
+const activityLabel = (action: string) => {
+  const labels: Record<string, string> = {
+    invited: 'mengundang admin baru',
+    accepted: 'menerima undangan',
+    rejected: 'menolak undangan',
+    removed: 'menghapus admin',
+    roles_updated: 'memperbarui role admin',
+    claim_ticket: 'mengklaim tiket',
+    release_ticket: 'melepaskan tiket',
+    confirm_ticket: 'mengonfirmasi tiket',
+    cancel_ticket: 'membatalkan tiket'
+  }
+  return labels[action] || action
+}
+
+const activityIcon = (action: string) => {
+  const icons: Record<string, string> = {
+    invited: 'person_add',
+    accepted: 'check_circle',
+    rejected: 'cancel',
+    removed: 'remove_circle',
+    roles_updated: 'edit',
+    claim_ticket: 'touch_app',
+    release_ticket: 'undo',
+    confirm_ticket: 'check_circle',
+    cancel_ticket: 'cancel'
+  }
+  return icons[action] || 'history'
+}
 
 onMounted(async () => {
   const { data: { session } } = await supabase.auth.getSession()
@@ -43,12 +65,11 @@ onMounted(async () => {
 
   try {
     const token = session?.access_token
-    const res = await fetch('/api/events', {
+    const res = await fetch('/api/events/creator-stats', {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
     if (res.ok) {
-      const data = await res.json()
-      events.value = data.events || []
+      stats.value = await res.json()
     }
   } catch {
     // silent
@@ -81,30 +102,30 @@ onMounted(async () => {
 
       <SkeletonPage v-if="loading" type="dashboard" />
 
-      <div v-else>
+      <div v-else-if="stats">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <div class="bg-surface-card rounded-xl border border-border/50 p-4">
-            <p class="text-2xl font-heading font-bold text-text-heading">{{ activeEvents.length }}</p>
+            <p class="text-2xl font-heading font-bold text-text-heading">{{ stats.activeEvents.length }}</p>
             <p class="text-xs text-text-muted mt-1">Acara Aktif</p>
           </div>
           <div class="bg-surface-card rounded-xl border border-border/50 p-4">
-            <p class="text-2xl font-heading font-bold text-text-heading">{{ totalSold }}</p>
+            <p class="text-2xl font-heading font-bold text-text-heading">{{ stats.totalSold }}</p>
             <p class="text-xs text-text-muted mt-1">Tiket Terjual</p>
           </div>
           <div class="bg-surface-card rounded-xl border border-border/50 p-4">
-            <p class="text-2xl font-heading font-bold text-text-heading">Rp {{ totalRevenue.toLocaleString('id-ID') }}</p>
+            <p class="text-2xl font-heading font-bold text-text-heading">{{ formatCurrency(stats.totalRevenue) }}</p>
             <p class="text-xs text-text-muted mt-1">Pendapatan</p>
           </div>
           <div class="bg-surface-card rounded-xl border border-border/50 p-4">
-            <p class="text-2xl font-heading font-bold text-text-heading">0</p>
+            <p class="text-2xl font-heading font-bold text-text-heading">{{ stats.todayScans }}</p>
             <p class="text-xs text-text-muted mt-1">Scan Hari Ini</p>
           </div>
         </div>
 
-        <div v-if="activeEvents.length > 0" class="space-y-4 mb-8">
+        <div v-if="stats.activeEvents.length > 0" class="space-y-4 mb-8">
           <h2 class="text-sm font-semibold text-text-muted uppercase tracking-wide">Acara Aktif</h2>
           <div
-            v-for="ev in activeEvents"
+            v-for="ev in stats.activeEvents"
             :key="ev.id"
             class="bg-surface-card rounded-2xl border border-border/50 overflow-hidden"
           >
@@ -126,16 +147,16 @@ onMounted(async () => {
               </div>
 
               <div class="flex items-center justify-between text-xs text-text-muted mb-4">
-                <span>0 / 0 tiket terjual</span>
-                <span>0%</span>
+                <span>{{ ev.ticketSold }} / {{ ev.ticketQuota }} tiket terjual</span>
+                <span>{{ ev.ticketQuota > 0 ? ev.soldPct : 0 }}%</span>
               </div>
               <div class="w-full h-1.5 rounded-full bg-surface-variant overflow-hidden mb-4">
-                <div class="h-full rounded-full bg-primary" style="width: 0%"></div>
+                <div class="h-full rounded-full bg-primary" :style="{ width: ev.ticketQuota > 0 ? ev.soldPct + '%' : '0%' }"></div>
               </div>
 
               <div class="flex gap-2">
-                <BaseButton variant="outline" size="sm" @click="router.push(`/creator/events`)">Kelola</BaseButton>
-                <BaseButton variant="ghost" size="sm" @click="router.push(`/acara`)">Lihat Pembeli</BaseButton>
+                <BaseButton variant="outline" size="sm" @click="router.push(`/events/${ev.id}/manage/overview`)">Kelola</BaseButton>
+                <BaseButton variant="ghost" size="sm" @click="router.push(`/events/${ev.id}`)">Lihat Halaman</BaseButton>
               </div>
             </div>
           </div>
@@ -152,7 +173,21 @@ onMounted(async () => {
 
         <div class="bg-surface-card rounded-2xl border border-border/50 p-5">
           <h2 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Aktivitas Tim</h2>
-          <div class="relative pl-6 space-y-4">
+          <div v-if="stats.recentActivity.length > 0" class="relative pl-6 space-y-4">
+            <div class="absolute left-[7px] top-2 bottom-2 w-0.5 bg-border"></div>
+            <div v-for="act in stats.recentActivity" :key="act.id" class="relative flex items-start gap-3">
+              <div class="absolute -left-[19px] w-3 h-3 rounded-full bg-primary/30 border-2 border-primary"></div>
+              <span class="material-symbols-outlined text-sm text-primary mt-0.5">{{ activityIcon(act.action) }}</span>
+              <div>
+                <p class="text-xs text-text">
+                  <span class="font-semibold">{{ act.performer }}</span>
+                  <span class="text-text-muted"> {{ activityLabel(act.action) }}</span>
+                </p>
+                <p class="text-[10px] text-text-muted mt-0.5">{{ formatDate(act.createdAt) }}</p>
+              </div>
+            </div>
+          </div>
+          <div v-else class="relative pl-6">
             <div class="absolute left-[7px] top-2 bottom-2 w-0.5 bg-border"></div>
             <div class="relative flex items-start gap-3">
               <div class="absolute -left-[19px] w-3 h-3 rounded-full bg-primary/30 border-2 border-primary"></div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { supabase } from '@/lib/supabase'
 import { useTeamManagement } from '@/composables/useTeamManagement'
 import BaseButton from '@/components/shared/BaseButton.vue'
 
@@ -59,6 +60,14 @@ const selectedUserDisplay = ref('')
 const selectedRoles = ref<string[]>([])
 const inviteLoading = ref(false)
 const inviteError = ref('')
+
+watch(inviteSearch, (val) => {
+  if (val.trim().length >= 2) {
+    searchUsers(val)
+  } else {
+    searchResults.value = []
+  }
+})
 
 const expandedAdminId = ref<string | null>(null)
 const editingRoleId = ref<string | null>(null)
@@ -209,6 +218,83 @@ const cancelRemove = () => {
 
 const toggleExpand = (id: string) => {
   expandedAdminId.value = expandedAdminId.value === id ? null : id
+}
+
+// ---- Creator-only Audit Log ----
+interface AuditEntry {
+  id: string
+  event_id: string
+  actor_id: string | null
+  action: string
+  target_id: string
+  metadata: Record<string, unknown>
+  created_at: string
+  actor_profile: { name: string; email: string } | null
+}
+
+const auditLogs = ref<AuditEntry[]>([])
+const auditLoading = ref(false)
+const showAuditLog = ref(false)
+
+const auditActionLabel = (action: string) => {
+  const labels: Record<string, string> = {
+    invite_admin:              'Mengundang admin',
+    update_admin_roles:        'Mengubah role admin',
+    remove_admin:              'Menghapus admin',
+    update_event_settings:     'Mengubah pengaturan acara',
+    claim_ticket:              'Mengambil klaim antrian tiket',
+    release_ticket:            'Melepaskan klaim antrian tiket',
+    confirm_ticket:            'Mengonfirmasi tiket',
+    cancel_ticket:             'Membatalkan tiket',
+    cancel_ticket_trigger_refund: 'Membatalkan tiket (refund otomatis)',
+    approve_invoice:           'Menyetujui invoice',
+    send_message:              'Mengirim pesan di chat',
+    approve_refund:            'Menyetujui refund',
+    reject_refund:             'Menolak refund'
+  }
+  return labels[action] || action
+}
+
+const auditActionIcon = (action: string) => {
+  const icons: Record<string, string> = {
+    invite_admin:              'person_add',
+    update_admin_roles:        'manage_accounts',
+    remove_admin:              'person_remove',
+    update_event_settings:     'settings',
+    claim_ticket:              'handshake',
+    release_ticket:            'lock_open',
+    confirm_ticket:            'check_circle',
+    cancel_ticket:             'cancel',
+    cancel_ticket_trigger_refund: 'money_off',
+    approve_invoice:           'receipt_long',
+    send_message:              'chat',
+    approve_refund:            'payments',
+    reject_refund:             'money_off'
+  }
+  return icons[action] || 'history'
+}
+
+const fetchAuditLog = async () => {
+  auditLoading.value = true
+  try {
+    const token = (await supabase.auth.getSession()).data.session?.access_token
+    const res = await fetch(`/api/events/${eventId}/admin-audit-log`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      auditLogs.value = data.logs || []
+    }
+  } catch { /* ignore */ } finally {
+    auditLoading.value = false
+  }
+}
+
+const toggleAuditLog = async () => {
+  showAuditLog.value = !showAuditLog.value
+  if (showAuditLog.value && auditLogs.value.length === 0) {
+    await fetchAuditLog()
+  }
 }
 
 onMounted(async () => {
@@ -367,6 +453,57 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Creator Audit Log Panel -->
+    <div class="mt-6">
+      <button
+        class="flex items-center gap-2 text-sm font-semibold text-text-muted hover:text-text-heading transition-colors cursor-pointer mb-3"
+        @click="toggleAuditLog"
+      >
+        <span class="material-symbols-outlined text-base transition-transform duration-200" :class="showAuditLog ? 'rotate-90' : ''">chevron_right</span>
+        <span class="material-symbols-outlined text-base text-amber-500">shield_person</span>
+        Log Audit Kreator
+        <span class="ml-auto text-xs font-normal text-text-muted">(Hanya terlihat oleh kamu)</span>
+      </button>
+
+      <Transition name="slide-fade">
+        <div v-if="showAuditLog" class="bg-surface-card rounded-2xl border border-border/50 overflow-hidden">
+          <div class="p-4 border-b border-border/30 flex items-center justify-between">
+            <h3 class="text-xs font-semibold text-text-muted uppercase tracking-wide">Riwayat Semua Aksi Admin</h3>
+            <button class="text-xs text-primary cursor-pointer hover:underline" @click="fetchAuditLog">Refresh</button>
+          </div>
+
+          <div v-if="auditLoading" class="flex items-center justify-center py-10 gap-2 text-sm text-text-muted">
+            <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
+            Memuat log...
+          </div>
+
+          <div v-else-if="auditLogs.length === 0" class="py-10 text-center text-sm text-text-muted">
+            Belum ada aktivitas yang tercatat.
+          </div>
+
+          <div v-else class="divide-y divide-border/20 max-h-96 overflow-y-auto">
+            <div
+              v-for="entry in auditLogs"
+              :key="entry.id"
+              class="flex items-start gap-3 px-4 py-3 hover:bg-surface/50 transition-colors"
+            >
+              <div class="w-7 h-7 rounded-full bg-surface flex items-center justify-center shrink-0 mt-0.5 border border-border/40">
+                <span class="material-symbols-outlined text-xs text-text-muted">{{ auditActionIcon(entry.action) }}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-xs text-text-heading">
+                  <span class="font-semibold">{{ entry.actor_profile?.name || 'Sistem' }}</span>
+                  <span class="text-text-muted"> — {{ auditActionLabel(entry.action) }}</span>
+                </p>
+                <p v-if="entry.actor_profile?.email" class="text-[10px] text-text-muted">{{ entry.actor_profile.email }}</p>
+                <p class="text-[10px] text-text-muted mt-0.5">{{ formatDateTime(entry.created_at) }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </div>
 
     <Teleport to="body">

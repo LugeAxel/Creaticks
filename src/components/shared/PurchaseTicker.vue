@@ -31,6 +31,8 @@ const doubled = computed(() => [...purchases.value, ...purchases.value])
   top: v-bind(stickyOffset + 'px');
   z-index: 30;
   overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px); /* Safari support */
   height: 28px;
   background: linear-gradient(135deg, rgba(107, 99, 255, 0.719), rgba(255, 101, 132, 0.686), rgba(67, 198, 172, 0.697), rgba(255, 178, 71, 0.774));
   background-size: 300% 300%;

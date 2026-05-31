@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
+import { logAdminAction } from '../lib/audit.js'
 
 const router = Router()
 
@@ -32,13 +33,98 @@ router.get('/', requireAuth, async (req, res) => {
   res.json({ events })
 })
 
-router.get('/published', async (req, res) => {
+router.get('/creator-stats', requireAuth, async (req, res) => {
+  const userId = req.user.id
+
   const { data: events, error } = await supabaseAdmin
     .from('events')
-    .select(EVENT_SELECT)
+    .select(`*,
+      ticket_tiers(id, name, price, quota, sold_count)
+    `)
+    .eq('creator_id', userId)
+    .order('date', { ascending: false })
+
+  if (error) {
+    logger.error('CREATOR-STATS', 'Failed to fetch creator stats', {
+      requestId: req.requestId,
+      error: error.message
+    })
+    return res.status(500).json({ error: 'Gagal mengambil data statistik' })
+  }
+
+  let totalSold = 0
+  let totalRevenue = 0
+  const activeEvents = (events || []).filter(e => e.status === 'published' || e.status === 'draft').map(e => {
+    const tiers = e.ticket_tiers || []
+    const sold = tiers.reduce((s, t) => s + (t.sold_count || 0), 0)
+    const rev = tiers.reduce((s, t) => s + (t.sold_count || 0) * (t.price || 0), 0)
+    totalSold += sold
+    totalRevenue += rev
+    const quota = tiers.reduce((s, t) => s + (t.quota || 0), 0)
+    const pct = quota > 0 ? Math.round((sold / quota) * 100) : 0
+    return { ...e, ticketSold: sold, ticketQuota: quota, soldPct: pct, revenue: rev }
+  })
+
+  // Get today's scan count
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const { count: todayScans } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_checked_in', true)
+    .gte('updated_at', todayStart.toISOString())
+    .in('event_id', (events || []).map(e => e.id))
+
+  // Recent activity
+  const { data: recentActivity } = await supabaseAdmin
+    .from('event_role_activity')
+    .select('*, profiles!performed_by(name, avatar_url)')
+    .in('event_role_id', (
+      await supabaseAdmin.from('event_roles').select('id').eq('invited_by', userId)
+    ).data?.map(r => r.id) || [])
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  res.json({
+    totalEvents: (events || []).length,
+    totalSold,
+    totalRevenue,
+    todayScans: todayScans || 0,
+    activeEvents,
+    recentActivity: (recentActivity || []).map(a => ({
+      id: a.id,
+      action: a.action,
+      performer: a.profiles?.name || 'Admin',
+      performerAvatar: a.profiles?.avatar_url || null,
+      createdAt: a.created_at
+    }))
+  })
+})
+
+router.get('/published', async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page) || 1)
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 8))
+  const offset = (page - 1) * limit
+  const search = (req.query.search || '').trim()
+  const category = (req.query.category || '').trim()
+
+  let query = supabaseAdmin
+    .from('events')
+    .select(EVENT_SELECT, { count: 'exact' })
     .eq('status', 'published')
     .eq('visibility', 'public')
+
+  if (category) {
+    query = query.eq('category', category)
+  }
+
+  if (search) {
+    query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%`)
+  }
+
+  const { data: events, error, count } = await query
     .order('date', { ascending: false })
+    .range(offset, offset + limit - 1)
 
   if (error) {
     logger.error('EVENTS-PUBLISHED', 'Failed to fetch published events', {
@@ -48,7 +134,7 @@ router.get('/published', async (req, res) => {
     return res.status(500).json({ error: 'Gagal mengambil daftar acara' })
   }
 
-  res.json({ events })
+  res.json({ events, total: count, page, limit })
 })
 
 router.get('/admin', requireAuth, async (req, res) => {
@@ -132,14 +218,12 @@ router.get('/:id', requireAuth, async (req, res) => {
 
   const isPublic = event.status === 'published' && event.visibility === 'public'
 
-  if (isPublic) {
-    return res.json({ event })
-  }
-
+  // Creator always gets full access regardless of visibility
   if (userId === event.creator_id) {
     return res.json({ event })
   }
 
+  // Admin check — must happen before isPublic so admins get adminRole
   const { data: adminRole } = await supabaseAdmin
     .from('event_roles')
     .select('id, roles')
@@ -150,6 +234,10 @@ router.get('/:id', requireAuth, async (req, res) => {
 
   if (adminRole) {
     return res.json({ event, adminRole: adminRole.roles })
+  }
+
+  if (isPublic) {
+    return res.json({ event })
   }
 
   const { data: ticket } = await supabaseAdmin
@@ -306,6 +394,10 @@ router.put('/:id', requireAuth, async (req, res) => {
   if (status !== undefined) updates.status = status
   if (gallery_urls !== undefined) updates.gallery_urls = gallery_urls
   if (req.body.seat_map !== undefined) updates.seat_map = req.body.seat_map
+  if (req.body.claim_message_template_enabled !== undefined) updates.claim_message_template_enabled = req.body.claim_message_template_enabled
+  if (req.body.claim_message_template !== undefined) updates.claim_message_template = req.body.claim_message_template
+  if (req.body.auto_release_claims_enabled !== undefined) updates.auto_release_claims_enabled = req.body.auto_release_claims_enabled
+  if (req.body.auto_release_claims_timeout !== undefined) updates.auto_release_claims_timeout = Number(req.body.auto_release_claims_timeout)
   updates.updated_at = new Date().toISOString()
 
   const { data: event, error } = await supabaseAdmin
@@ -323,6 +415,14 @@ router.put('/:id', requireAuth, async (req, res) => {
     })
     return res.status(500).json({ error: 'Gagal memperbarui acara' })
   }
+
+  // Log system edit in audit log
+  await logAdminAction({
+    eventId: id,
+    actorId: req.user.id,
+    action: 'update_event_settings',
+    metadata: { updates }
+  })
 
   if (ticket_tiers !== undefined && Array.isArray(ticket_tiers)) {
     const { error: deleteError } = await supabaseAdmin
@@ -504,6 +604,61 @@ router.get('/:id/hype', async (req, res) => {
     watching_count: watchingCount || 0,
     active_viewers: Math.max(3, Math.floor((totalSold * 1.5) + Math.random() * 10))
   })
+})
+
+// GET /api/events/:id/admin-audit-log — retrieve admin audit log for creator only
+router.get('/:id/admin-audit-log', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const userId = req.user.id
+
+  const { data: event, error: eventError } = await supabaseAdmin
+    .from('events')
+    .select('creator_id')
+    .eq('id', id)
+    .single()
+
+  if (eventError || !event) {
+    return res.status(404).json({ error: 'Acara tidak ditemukan' })
+  }
+
+  if (event.creator_id !== userId) {
+    return res.status(403).json({ error: 'Akses ditolak. Hanya kreator acara yang dapat mengakses log audit.' })
+  }
+
+  const { data: logs, error: logsError } = await supabaseAdmin
+    .from('admin_audit_log')
+    .select('*')
+    .eq('event_id', id)
+    .order('created_at', { ascending: false })
+
+  if (logsError) {
+    logger.error('ADMIN-AUDIT-LOG', 'Failed to fetch logs', { error: logsError.message, eventId: id })
+    return res.status(500).json({ error: 'Gagal mengambil log audit' })
+  }
+
+  const actorIds = [...new Set(logs.map(l => l.actor_id).filter(Boolean))]
+  const actorProfiles = {}
+
+  await Promise.all(actorIds.map(async (uid) => {
+    try {
+      const { data: user } = await supabaseAdmin.auth.admin.getUserById(uid)
+      if (user?.user) {
+        actorProfiles[uid] = {
+          name: user.user.user_metadata?.name || user.user.email?.split('@')[0] || 'Unknown',
+          email: user.user.email || ''
+        }
+      }
+    } catch {
+      actorProfiles[uid] = { name: 'Unknown', email: '' }
+    }
+  }))
+
+  const enriched = logs.map(l => ({
+    ...l,
+    actor_profile: l.actor_id ? (actorProfiles[l.actor_id] || { name: 'Unknown', email: '' }) : null
+  }))
+
+  res.json({ logs: enriched })
 })
 
 export default router

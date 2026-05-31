@@ -3,10 +3,15 @@ import { io, Socket } from 'socket.io-client'
 let socket: Socket | null = null
 let authToken: string | null = null
 const joinedRooms = new Set<string>()
+const pendingListeners: [string, (...args: any[]) => void][] = []
 
 export function setSocketAuthToken(token: string | null) {
   authToken = token
-  if (!socket) return
+  if (!socket) {
+    if (!token) return
+    initSocket(token)
+    return
+  }
   socket.auth = { token }
   if (socket.connected) {
     socket.disconnect()
@@ -14,12 +19,11 @@ export function setSocketAuthToken(token: string | null) {
   socket.connect()
 }
 
-export function getSocket() {
-  if (socket) return socket
+function initSocket(token: string) {
   const url = import.meta.env.VITE_API_URL
   socket = io(url, {
     autoConnect: false,
-    auth: { token: authToken }
+    auth: { token }
   })
 
   socket.on('connect_error', (err) => {
@@ -27,35 +31,47 @@ export function getSocket() {
   })
 
   socket.on('connect', () => {
-    // Re-join previously joined rooms after reconnect
     joinedRooms.forEach(r => {
       try { socket?.emit('join:room', { room: r }) } catch (e) {}
     })
   })
 
+  // Replay any listeners that were registered before init
+  for (const [ev, cb] of pendingListeners) {
+    socket.on(ev, cb)
+  }
+  pendingListeners.length = 0
+
   socket.connect()
+  return socket
+}
+
+export function getSocket() {
   return socket
 }
 
 export function joinRoom(room: string) {
   joinedRooms.add(room)
-  const s = getSocket()
-  if (s.connected) s.emit('join:room', { room })
+  const s = socket
+  if (s?.connected) s.emit('join:room', { room })
 }
 
 export function leaveRoom(room: string) {
   joinedRooms.delete(room)
-  const s = getSocket()
-  if (s.connected) s.emit('leave:room', { room })
+  const s = socket
+  if (s?.connected) s.emit('leave:room', { room })
 }
 
 export function onEvent(ev: string, cb: (...args: any[]) => void) {
-  const s = getSocket()
-  s.on(ev, cb)
+  if (socket) {
+    socket.on(ev, cb)
+  } else {
+    pendingListeners.push([ev, cb])
+  }
 }
 
 export function offEvent(ev: string, cb?: (...args: any[]) => void) {
-  const s = getSocket()
-  if (cb) s.off(ev, cb)
-  else s.removeAllListeners(ev)
+  if (!socket) return
+  if (cb) socket.off(ev, cb)
+  else socket.removeAllListeners(ev)
 }

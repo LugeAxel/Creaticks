@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { User } from '@supabase/supabase-js'
-import { useAdminEvents } from '@/composables/useAdminEvents'
 
 const router = useRouter()
 const route = useRoute()
@@ -11,10 +10,6 @@ const props = defineProps<{
   user: User | null
   chatUnread?: number
 }>()
-
-const { hasEvents, fetchMyEvents } = useAdminEvents()
-
-const isCreator = computed(() => props.user?.user_metadata?.role === 'creator')
 
 const navItems = computed(() => {
   if (!props.user) {
@@ -25,29 +20,13 @@ const navItems = computed(() => {
     ]
   }
 
-  const items: Array<{ name: string; icon: string; route: string }> = [
+  return [
     { name: 'Beranda', icon: 'dashboard', route: '/dashboard' },
-    { name: 'Acara', icon: 'event', route: '/acara' }
+    { name: 'Acara', icon: 'event', route: '/acara' },
+    { name: 'Tiket', icon: 'confirmation_number', route: '/tickets' },
+    { name: 'Pesan', icon: 'chat', route: '/chat' }
   ]
-
-  if (hasEvents.value) {
-    items.push({ name: 'Acara Saya', icon: 'event_note', route: '/events/saya' })
-  } else {
-    items.push({ name: 'Tiket', icon: 'confirmation_number', route: '/tickets' })
-  }
-
-  items.push({ name: 'Pesan', icon: 'chat', route: '/chat' })
-
-  if (isCreator.value) {
-    items.push({ name: 'Buat', icon: 'add_circle', route: '/creator/events/new' })
-  }
-
-  return items
 })
-
-watch(() => props.user, (u) => {
-  if (u) fetchMyEvents()
-}, { immediate: true })
 
 const isActive = (path: string) => {
   return route.path === path

@@ -184,6 +184,22 @@ onMounted(async () => {
           </div>
         </div>
 
+        <!-- Creator Banner -->
+        <div v-if="isCreator" class="bg-gradient-to-r from-primary/10 to-accent/10 rounded-2xl border border-primary/20 p-5">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-3xl text-primary">palette</span>
+              <div>
+                <h2 class="text-base font-heading font-bold text-text-heading">You are a creator!</h2>
+                <p class="text-sm text-text-heading/50">Kelola acara dan pantau performa Anda</p>
+              </div>
+            </div>
+            <BaseButton variant="accent" size="sm" @click="router.push('/creator')">
+              Dashboard Kreator
+            </BaseButton>
+          </div>
+        </div>
+
         <!-- Quick Actions -->
         <div class="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
           <button
@@ -195,17 +211,17 @@ onMounted(async () => {
           </button>
           <button
             class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
-            @click="router.push('/tiket')"
+            @click="router.push('/tickets')"
           >
             <span class="material-symbols-outlined text-lg text-text-heading/50">confirmation_number</span>
             Tiket Saya
           </button>
           <button v-if="isCreator"
             class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
-            @click="router.push('/acara-saya')"
+            @click="router.push('/creator')"
           >
-            <span class="material-symbols-outlined text-lg text-text-heading/50">event</span>
-            Acara Saya
+            <span class="material-symbols-outlined text-lg text-text-heading/50">dashboard</span>
+            Dashboard Kreator
           </button>
           <button v-if="isCreator"
             class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"

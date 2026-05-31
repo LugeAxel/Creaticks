@@ -657,30 +657,14 @@ function getTierName(tierId: string | null) {
       </div>
 
       <div v-else-if="isAdmin" class="fixed bottom-16 md:bottom-0 left-0 right-0 md:static md:mt-6 bg-surface-card border border-teal-500/30 md:rounded-2xl p-4 md:p-6 max-w-screen-md md:mx-auto z-40">
-        <div class="max-w-screen-md mx-auto">
-          <div class="flex items-center gap-2 mb-2">
+        <div class="max-w-screen-md mx-auto flex items-center justify-between gap-4">
+          <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-teal-500 text-lg">admin_panel_settings</span>
-            <p class="text-sm font-semibold text-teal-600">Kamu adalah Admin acara ini</p>
+            <p class="text-sm font-semibold text-teal-600">Kamu adalah Admin</p>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <BaseButton variant="primary" size="sm" @click="router.push(`/admin/events/${eventId}/queue`)">
-              Antrian Tiket
-            </BaseButton>
-            <BaseButton variant="secondary" size="sm" @click="router.push(`/admin/events/${eventId}/chat`)">
-              Chat
-            </BaseButton>
-            <BaseButton variant="secondary" size="sm" @click="router.push(`/admin/events/${eventId}/scanner`)">
-              Scan QR
-            </BaseButton>
-            <BaseButton variant="secondary" size="sm" @click="router.push(`/admin/events/${eventId}/attendance`)">
-              Kehadiran
-            </BaseButton>
-          </div>
-          <div v-if="adminRoles && adminRoles.length > 0" class="mt-2 flex gap-1">
-            <span v-for="r in adminRoles" :key="r" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600">
-              {{ r }}
-            </span>
-          </div>
+          <BaseButton variant="primary" size="sm" @click="router.push(`/events/${eventId}/manage/overview`)">
+            Kelola Acara
+          </BaseButton>
         </div>
       </div>
     </div>

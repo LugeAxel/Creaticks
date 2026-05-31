@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
 import { createNotification } from './notifications.js'
+import { logAdminAction } from '../lib/audit.js'
 
 const router = Router()
 
@@ -35,7 +36,7 @@ router.post('/search', requireAuth, async (req, res) => {
   try {
     const { data: profiles, error } = await supabaseAdmin
       .from('profiles')
-      .select('id, name, avatar_url')
+      .select('id, name, avatar_url, email')
       .or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
       .neq('id', req.user.id)
       .limit(20)
@@ -276,6 +277,15 @@ router.post('/', requireAuth, async (req, res) => {
     roles
   })
 
+  // Log in admin audit log
+  await logAdminAction({
+    eventId: event_id,
+    actorId: req.user.id,
+    action: 'invite_admin',
+    targetId: invitation.id,
+    metadata: { user_id, roles }
+  })
+
   await createNotification(
     user_id,
     'invite',
@@ -475,6 +485,15 @@ router.put('/:id/roles', requireAuth, async (req, res) => {
     updated: roles
   })
 
+  // Log in admin audit log
+  await logAdminAction({
+    eventId: existing.event_id,
+    actorId: req.user.id,
+    action: 'update_admin_roles',
+    targetId: id,
+    metadata: { previous: previousRoles, updated: roles }
+  })
+
   logger.info('INVITATION-ROLES', 'Roles updated', {
     requestId: req.requestId,
     invitationId: id,
@@ -509,6 +528,15 @@ router.delete('/:id', requireAuth, async (req, res) => {
     event_title: existing.events.title,
     roles: existing.roles,
     removed_user: existing.user_id
+  })
+
+  // Log in admin audit log
+  await logAdminAction({
+    eventId: existing.event_id,
+    actorId: req.user.id,
+    action: 'remove_admin',
+    targetId: id,
+    metadata: { removed_user: existing.user_id, roles: existing.roles }
   })
 
   const { error: deleteError } = await supabaseAdmin

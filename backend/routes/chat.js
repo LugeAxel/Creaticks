@@ -3,23 +3,25 @@ import { requireAuth } from '../middleware/auth.js'
 import { verifyAdminScope } from '../middleware/adminScope.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
+import { logAdminAction } from '../lib/audit.js'
 
 const router = Router()
 
 async function canAccessThread(threadId, userId) {
   const { data: thread, error } = await supabaseAdmin
     .from('chat_threads')
-    .select('*, events!inner(creator_id)')
+    .select('*, events!inner(creator_id), ticket_request:ticket_request_id!inner(claimed_by)')
     .eq('id', threadId)
     .single()
 
   if (error || !thread) return null
 
+  // Buyer of the thread can access
   if (thread.buyer_id === userId) return thread
+  // Event creator can access
   if (thread.events.creator_id === userId) return thread
-
-  const adminRole = await verifyAdminScope(thread.event_id, userId)
-  if (adminRole) return thread
+  // Admin who claimed this specific ticket can access
+  if (thread.ticket_request.claimed_by === userId) return thread
 
   return null
 }
@@ -67,27 +69,45 @@ async function enrichUnreadCount(threads, userId) {
 router.get('/event/:eventId', requireAuth, async (req, res) => {
   const { eventId } = req.params
 
-  const adminRole = await verifyAdminScope(eventId, req.user.id)
-  if (!adminRole) {
-    const { data: event } = await supabaseAdmin
-      .from('events')
-      .select('creator_id')
-      .eq('id', eventId)
-      .single()
+  // Check if user is creator or has admin scope
+  const { data: event } = await supabaseAdmin
+    .from('events')
+    .select('creator_id')
+    .eq('id', eventId)
+    .single()
 
-    if (!event || event.creator_id !== req.user.id) {
+  const isCreator = event && event.creator_id === req.user.id
+
+  if (!isCreator) {
+    const adminRole = await verifyAdminScope(eventId, req.user.id)
+    if (!adminRole) {
       return res.status(403).json({ error: 'Akses ditolak' })
     }
   }
 
-  const { data: threads, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('chat_threads')
     .select(`
       *,
       ticket_request:ticket_request_id (tier_name, status)
     `)
     .eq('event_id', eventId)
-    .order('updated_at', { ascending: false })
+
+  // Non-creator admins only see threads they claimed
+  if (!isCreator) {
+    const { data: claimedTickets } = await supabaseAdmin
+      .from('ticket_requests')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('claimed_by', req.user.id)
+
+    const claimedIds = (claimedTickets || []).map(t => t.id)
+    query = query.in('ticket_request_id', claimedIds.length > 0 ? claimedIds : ['_none_'])
+  }
+
+  query = query.order('updated_at', { ascending: false })
+
+  const { data: threads, error } = await query
 
   if (error) {
     logger.error('CHAT-LIST', 'Failed to fetch threads', {
@@ -285,6 +305,17 @@ router.post('/thread/:threadId/messages', requireAuth, async (req, res) => {
     .from('chat_threads')
     .update({ updated_at: new Date().toISOString() })
     .eq('id', threadId)
+
+  // Log in admin audit log if sender is not the buyer (is admin or creator)
+  if (thread.buyer_id !== req.user.id) {
+    await logAdminAction({
+      eventId: thread.event_id,
+      actorId: req.user.id,
+      action: 'send_message',
+      targetId: message.id,
+      metadata: { thread_id: threadId }
+    })
+  }
 
   res.status(201).json({ message })
 })

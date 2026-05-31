@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { User } from '@supabase/supabase-js'
-import { useAdminEvents } from '@/composables/useAdminEvents'
 
 const router = useRouter()
 const route = useRoute()
@@ -14,10 +13,7 @@ const props = defineProps<{
 
 const sidebarHovered = ref(false)
 
-const { hasEvents, fetchMyEvents } = useAdminEvents()
-
 const isCreator = computed(() => props.user?.user_metadata?.role === 'creator')
-const hasUndangan = computed(() => false)
 
 const navItems = computed(() => {
   if (!props.user) {
@@ -29,19 +25,10 @@ const navItems = computed(() => {
 
   const items: Array<{ name: string; icon: string; route: string }> = [
     { name: 'Beranda', icon: 'dashboard', route: '/dashboard' },
-    { name: 'Cari Acara', icon: 'event', route: '/acara' }
+    { name: 'Cari Acara', icon: 'event', route: '/acara' },
+    { name: 'Tiket Saya', icon: 'confirmation_number', route: '/tickets' },
+    { name: 'Pesan', icon: 'chat', route: '/chat' }
   ]
-
-  if (hasEvents.value) {
-    items.push({ name: 'Acara Saya', icon: 'event_note', route: '/events/saya' })
-  }
-
-  items.push({ name: 'Tiket Saya', icon: 'confirmation_number', route: '/tickets' })
-  items.push({ name: 'Pesan', icon: 'chat', route: '/chat' })
-
-  if (hasUndangan.value) {
-    items.push({ name: 'Undangan', icon: 'mail', route: '/undangan' })
-  }
 
   if (isCreator.value) {
     items.push({ name: 'Buat Acara', icon: 'add_circle', route: '/creator/events/new' })
@@ -51,10 +38,6 @@ const navItems = computed(() => {
 
   return items
 })
-
-watch(() => props.user, (u) => {
-  if (u) fetchMyEvents()
-}, { immediate: true })
 
 const isActive = (path: string) => route.path === path
 
