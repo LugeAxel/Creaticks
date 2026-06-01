@@ -42,7 +42,7 @@ const statusColor = (s: string) => {
 }
 
 const editEvent = (id: string) => {
-  router.push({ name: 'event-editor-edit', params: { id } })
+  router.push({ name: 'event-manage-editor', params: { eventId: id } })
 }
 
 const viewEvent = (id: string) => {

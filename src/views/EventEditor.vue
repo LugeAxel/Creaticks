@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
+
 import BackButton from '@/components/shared/BackButton.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BaseInput from '@/components/shared/BaseInput.vue'
@@ -14,20 +14,34 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import SeatEditor from '@/components/seats/SeatEditor.vue'
 import type { EditorSeat } from '@/components/seats/SeatEditor.vue'
+import HCaptcha from '@/components/shared/HCaptcha.vue'
 
 const router = useRouter()
 const route = useRoute()
-const { session, getAuthHeaders } = useAuth()
+const { session } = useAuth()
 const { upload } = useCloudinary()
 const { searchResults, searchUsers, inviteUser } = useTeamManagement()
 const { showToast } = useToast()
 
-const isEditing = computed(() => !!route.params.id)
+const eventIdParam = computed(() => (route.params.id as string) || (route.params.eventId as string))
+const isEditing = computed(() => !!eventIdParam.value)
 const loadingEvent = ref(false)
 const currentStep = ref(1)
 const totalSteps = 4
 const saving = ref(false)
 const error = ref('')
+const captchaToken = ref('')
+const captchaRef = ref<InstanceType<typeof HCaptcha>>()
+
+const onCaptchaVerified = (token: string) => {
+  captchaToken.value = token
+}
+
+const onCaptchaExpired = () => {
+  captchaToken.value = ''
+}
+
+const hCaptchaSiteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY
 
 const stepLabels = ['Info Event', 'Tiket', 'Tim', 'Publikasi']
 
@@ -39,7 +53,9 @@ const eventData = ref({
   event_format: 'offline',
   visibility: 'public',
   date: '',
-  time: '',
+  event_start_time: '',
+  event_end_time: '',
+  timezone: 'Asia/Jakarta',
   location: '',
   location_lat: null as number | null,
   location_lng: null as number | null,
@@ -62,6 +78,7 @@ interface TicketTier {
 const ticketTiers = ref<TicketTier[]>([])
 
 const useSeatMap = ref(false)
+const hasExistingSeats = ref(false)
 const seatMapData = ref<{ gridX: number; gridY: number; seats: EditorSeat[] }>({
   gridX: 25,
   gridY: 20,
@@ -91,7 +108,7 @@ const formatOptions = [
 
 const canContinue = computed(() => {
   if (currentStep.value === 1) {
-    return eventData.value.title.trim().length > 0 && eventData.value.date.length > 0
+    return eventData.value.title.trim().length > 0 && eventData.value.date.length > 0 && eventData.value.event_start_time.length > 0 && eventData.value.event_end_time.length > 0
   }
   if (currentStep.value === 2) {
     return ticketTiers.value.length > 0
@@ -109,6 +126,71 @@ const paintedSeatCountPerTier = computed(() => {
   }
   return counts
 })
+
+// Seat booking conflict state
+const seatConflictModal = ref(false)
+const bookedSeatsData = ref<Array<{ id: string; seat_code: string; x: number; y: number; status: string }>>([])
+const seatReassignments = ref<Record<string, { newX: number; newY: number }>>({})
+const pendingSeatSaveAction = ref<'draft' | 'publish' | null>(null)
+
+async function generateSeats(eventId: string, token: string) {
+  const res = await fetch(`/api/events/${eventId}/seats/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(seatMapData.value)
+  })
+  if (res.status === 409) {
+    const data = await res.json()
+    if (data.code === 'BOOKED_SEATS_EXIST') {
+      bookedSeatsData.value = data.bookedSeats || []
+      seatReassignments.value = {}
+      for (const s of data.bookedSeats || []) {
+        seatReassignments.value[s.id] = { newX: s.x, newY: s.y }
+      }
+      seatConflictModal.value = true
+      return false
+    }
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    error.value = data.error || 'Gagal generate kursi'
+    return false
+  }
+  return true
+}
+
+async function submitReassignments() {
+  const token = (await session.value?.access_token) || ''
+  const eventId = eventIdParam.value
+
+  const changedSeats = Object.entries(seatReassignments.value)
+    .filter(([id, pos]) => {
+      const original = bookedSeatsData.value.find(s => s.id === id)
+      return original && (pos.newX !== original.x || pos.newY !== original.y)
+    })
+    .map(([id, pos]) => ({ id, x: pos.newX, y: pos.newY }))
+
+  if (changedSeats.length > 0) {
+    const res = await fetch(`/api/events/${eventId}/seats/reassign`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ seats: changedSeats })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      error.value = data.error || 'Gagal memperbarui posisi kursi'
+      return
+    }
+  }
+
+  seatConflictModal.value = false
+
+  // Retry generate
+  const success = await generateSeats(eventId, token)
+  if (success) {
+    router.push({ name: 'creator-dashboard' })
+  }
+}
 
 const galleryUrls = ref<string[]>([])
 const galleryUploading = ref(false)
@@ -344,13 +426,13 @@ const extractTime = (dateStr: string) => {
 onMounted(async () => {
   if (!isEditing.value) return
   loadingEvent.value = true
-  const token = (await session.value?.access_token) || ''
   try {
-    const res = await fetch(`/api/events/${route.params.id}`, {
-      headers: { Authorization: `Bearer ${token}` }
+    const res = await fetch(`/api/events/${eventIdParam.value}`, {
+      headers: { Authorization: `Bearer ${session.value?.access_token}` }
     })
     if (!res.ok) {
-      error.value = 'Gagal memuat data acara'
+      showToast('Gagal memuat data acara', 'error')
+      router.push('/events/saya')
       return
     }
     const data = await res.json()
@@ -363,7 +445,9 @@ onMounted(async () => {
       event_format: ev.event_format || 'offline',
       visibility: ev.visibility || 'public',
       date: ev.date ? ev.date.slice(0, 10) : '',
-      time: extractTime(ev.date),
+      event_start_time: ev.event_start_time ? ev.event_start_time.slice(0, 5) : (ev.date ? extractTime(ev.date) : ''),
+      event_end_time: ev.event_end_time ? ev.event_end_time.slice(0, 5) : '',
+      timezone: ev.timezone || 'Asia/Jakarta',
       location: ev.location || '',
       location_lat: ev.location_lat ?? null,
       location_lng: ev.location_lng ?? null,
@@ -385,6 +469,7 @@ onMounted(async () => {
 
     if (ev.seat_map) {
       useSeatMap.value = true
+      hasExistingSeats.value = true
       seatMapData.value = typeof ev.seat_map === 'string' ? JSON.parse(ev.seat_map) : ev.seat_map
     } else {
       useSeatMap.value = false
@@ -407,7 +492,7 @@ const addTier = () => {
     id: Date.now(),
     name: '',
     price: 0,
-    limit: 0,
+    limit: 1,
     description: '',
     color: nextColor,
     seat_tier: false
@@ -437,12 +522,18 @@ const handleSaveDraft = async () => {
   error.value = ''
   const token = (await session.value?.access_token) || ''
 
+  if (!isEditing.value && !captchaToken.value) {
+    error.value = 'Harap selesaikan verifikasi keamanan'
+    saving.value = false
+    return
+  }
+
   try {
     const dateStr = eventData.value.date
-      ? `${eventData.value.date}${eventData.value.time ? `T${eventData.value.time}:00` : 'T00:00:00'}`
+      ? `${eventData.value.date}T${eventData.value.event_start_time || '00:00'}:00`
       : new Date().toISOString()
 
-    const url = isEditing.value ? `/api/events/${route.params.id}` : '/api/events'
+    const url = isEditing.value ? `/api/events/${eventIdParam.value}` : '/api/events'
     const res = await fetch(url, {
       method: isEditing.value ? 'PUT' : 'POST',
       headers: {
@@ -452,37 +543,37 @@ const handleSaveDraft = async () => {
       body: JSON.stringify({
         ...eventData.value,
         date: dateStr,
+        event_start_time: eventData.value.event_start_time || null,
+        event_end_time: eventData.value.event_end_time || null,
+        timezone: eventData.value.timezone || 'Asia/Jakarta',
         status: 'draft',
         gallery_urls: galleryUrls.value,
         ticket_tiers: ticketTiers.value,
         invited_admins: invitedAdmins.value,
-        seat_map: useSeatMap.value ? seatMapData.value : null
+        seat_map: useSeatMap.value ? seatMapData.value : null,
+        ...(!isEditing.value ? { captchaToken: captchaToken.value } : {})
       })
     })
 
     if (!res.ok) {
       const data = await res.json()
       error.value = data.error || 'Gagal menyimpan acara'
+      captchaToken.value = ''
+      captchaRef.value?.reset()
       saving.value = false
       return
     }
 
     const savedEvent = await res.json()
-    const eventId = savedEvent.event?.id || route.params.id
+    const eventId = savedEvent.event?.id || eventIdParam.value
 
     // Auto-generate seats if seat map is enabled
     if (useSeatMap.value && seatMapData.value.seats.length > 0) {
-      try {
-        await fetch(`/api/events/${eventId}/seats/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(seatMapData.value)
-        })
-      } catch (e) {
-        // non-blocking — event saved, seat generation may be retried
+      const ok = await generateSeats(eventId, token)
+      if (!ok && seatConflictModal.value) {
+        pendingSeatSaveAction.value = 'draft'
+        saving.value = false
+        return
       }
     }
 
@@ -498,12 +589,30 @@ const handlePublish = async () => {
   error.value = ''
   const token = (await session.value?.access_token) || ''
 
+  if (!isEditing.value && !captchaToken.value) {
+    error.value = 'Harap selesaikan verifikasi keamanan'
+    saving.value = false
+    return
+  }
+
   try {
+    if (!eventData.value.banner_url) {
+      error.value = 'Cover acara wajib diisi sebelum mempublikasikan'
+      saving.value = false
+      return
+    }
+
+    if (eventData.value.event_start_time === eventData.value.event_end_time) {
+      error.value = 'Waktu mulai dan selesai tidak boleh sama'
+      saving.value = false
+      return
+    }
+
     const dateStr = eventData.value.date
-      ? `${eventData.value.date}${eventData.value.time ? `T${eventData.value.time}:00` : 'T00:00:00'}`
+      ? `${eventData.value.date}T${eventData.value.event_start_time || '00:00'}:00`
       : new Date().toISOString()
 
-    const url = isEditing.value ? `/api/events/${route.params.id}` : '/api/events'
+    const url = isEditing.value ? `/api/events/${eventIdParam.value}` : '/api/events'
     const res = await fetch(url, {
       method: isEditing.value ? 'PUT' : 'POST',
       headers: {
@@ -513,37 +622,37 @@ const handlePublish = async () => {
       body: JSON.stringify({
         ...eventData.value,
         date: dateStr,
+        event_start_time: eventData.value.event_start_time || null,
+        event_end_time: eventData.value.event_end_time || null,
+        timezone: eventData.value.timezone || 'Asia/Jakarta',
         status: 'published',
         gallery_urls: galleryUrls.value,
         ticket_tiers: ticketTiers.value,
         invited_admins: invitedAdmins.value,
-        seat_map: useSeatMap.value ? seatMapData.value : null
+        seat_map: useSeatMap.value ? seatMapData.value : null,
+        ...(!isEditing.value ? { captchaToken: captchaToken.value } : {})
       })
     })
 
     if (!res.ok) {
       const data = await res.json()
       error.value = data.error || 'Gagal mempublikasi acara'
+      captchaToken.value = ''
+      captchaRef.value?.reset()
       saving.value = false
       return
     }
 
     const savedEvent = await res.json()
-    const eventId = savedEvent.event?.id || route.params.id
+    const eventId = savedEvent.event?.id || eventIdParam.value
 
     // Auto-generate seats if seat map is enabled
     if (useSeatMap.value && seatMapData.value.seats.length > 0) {
-      try {
-        await fetch(`/api/events/${eventId}/seats/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(seatMapData.value)
-        })
-      } catch (e) {
-        // non-blocking — event published, seat generation may be retried
+      const ok = await generateSeats(eventId, token)
+      if (!ok && seatConflictModal.value) {
+        pendingSeatSaveAction.value = 'publish'
+        saving.value = false
+        return
       }
     }
 
@@ -594,9 +703,8 @@ const removeInvitedAdmin = (idx: number) => {
 </script>
 
 <template>
-  <AppLayout :title="isEditing ? 'Edit Acara' : 'Buat Acara'">
-    <SkeletonPage v-if="loadingEvent" type="editor" />
-    <template v-else>
+  <SkeletonPage v-if="loadingEvent" type="editor" />
+  <template v-else>
     <div class="max-w-3xl mx-auto px-4 md:px-6 py-6">
       <div class="flex items-center justify-between mb-6">
         <BackButton />
@@ -738,8 +846,8 @@ const removeInvitedAdmin = (idx: number) => {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="md:col-span-2">
             <label class="text-sm font-semibold text-text mb-1.5 block">Tanggal Event <span class="text-error">*</span></label>
             <input
               v-model="eventData.date"
@@ -748,13 +856,33 @@ const removeInvitedAdmin = (idx: number) => {
             />
           </div>
           <div>
-            <label class="text-sm font-semibold text-text mb-1.5 block">Waktu Mulai</label>
+            <label class="text-sm font-semibold text-text mb-1.5 block">Waktu Mulai <span class="text-error">*</span></label>
             <input
-              v-model="eventData.time"
+              v-model="eventData.event_start_time"
               type="time"
               class="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             />
           </div>
+          <div>
+            <label class="text-sm font-semibold text-text mb-1.5 block">Waktu Selesai <span class="text-error">*</span></label>
+            <input
+              v-model="eventData.event_end_time"
+              type="time"
+              class="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="text-sm font-semibold text-text mb-1.5 block">Zona Waktu</label>
+          <select
+            v-model="eventData.timezone"
+            class="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          >
+            <option value="Asia/Jakarta">WIB (UTC+7)</option>
+            <option value="Asia/Makassar">WITA (UTC+8)</option>
+            <option value="Asia/Jayapura">WIT (UTC+9)</option>
+          </select>
         </div>
 
         <div v-if="eventData.event_format !== 'online'">
@@ -896,8 +1024,8 @@ const removeInvitedAdmin = (idx: number) => {
                 <span class="material-symbols-outlined text-lg text-text-muted">event_seat</span>
                 <span class="text-sm font-semibold text-text">Tiket Kursi</span>
               </div>
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" v-model="tier.seat_tier" class="sr-only peer" />
+              <label class="relative inline-flex items-center" :class="hasExistingSeats ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'">
+                <input type="checkbox" v-model="tier.seat_tier" class="sr-only peer" :disabled="hasExistingSeats" />
                 <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
               </label>
             </div>
@@ -927,7 +1055,7 @@ const removeInvitedAdmin = (idx: number) => {
                   v-if="!tier.seat_tier"
                   v-model.number="tier.limit"
                   type="number"
-                  min="0"
+                  min="1"
                   placeholder="100"
                   class="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                 />
@@ -952,8 +1080,8 @@ const removeInvitedAdmin = (idx: number) => {
         <div class="mt-6 bg-surface-card rounded-2xl border border-border/50 p-6">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-xl font-heading font-bold text-text-heading">Denah Kursi</h2>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" v-model="useSeatMap" class="sr-only peer" />
+            <label class="relative inline-flex items-center" :class="hasExistingSeats ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'">
+              <input type="checkbox" v-model="useSeatMap" class="sr-only peer" :disabled="hasExistingSeats" />
               <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
               <span class="ms-2 text-sm font-medium text-text-muted">Aktifkan</span>
             </label>
@@ -968,6 +1096,7 @@ const removeInvitedAdmin = (idx: number) => {
             <SeatEditor
               v-model="seatMapData"
               :tiers="ticketTiers.filter(t => t.seat_tier).map(t => ({ name: t.name, price: t.price, color: t.color }))"
+              :readonly="hasExistingSeats"
             />
             <p class="text-xs text-text-muted mt-3">
               Hanya tipe tiket yang diatur sebagai "Tiket Kursi" yang muncul di editor.
@@ -1124,17 +1253,81 @@ const removeInvitedAdmin = (idx: number) => {
 
         <div class="flex justify-between">
           <BaseButton variant="outline" @click="prevStep">Kembali</BaseButton>
-          <div class="flex gap-3">
-            <BaseButton variant="outline" :loading="saving" @click="handleSaveDraft">
-              Simpan Draft
-            </BaseButton>
-            <BaseButton variant="accent" :loading="saving" @click="handlePublish">
-              Publikasi
-            </BaseButton>
+          <div class="flex flex-col gap-2 items-end">
+            <HCaptcha
+              ref="captchaRef"
+              v-if="!isEditing && !captchaToken"
+              :sitekey="hCaptchaSiteKey"
+              @verify="onCaptchaVerified"
+              @expired="onCaptchaExpired"
+            />
+            <div class="flex gap-3">
+              <BaseButton variant="outline" :loading="saving" @click="handleSaveDraft" :disabled="!isEditing && !captchaToken">
+                Simpan Draft
+              </BaseButton>
+              <BaseButton variant="accent" :loading="saving" @click="handlePublish" :disabled="!isEditing && !captchaToken">
+                Publikasi
+              </BaseButton>
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Seat booking conflict modal -->
+    <div
+      v-if="seatConflictModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      @click.self="seatConflictModal = false"
+    >
+      <div class="bg-surface-card rounded-2xl shadow-xl max-w-lg w-full p-6 max-h-[80vh] overflow-y-auto">
+        <h3 class="font-heading font-bold text-text-heading mb-2">Kursi dengan Pemesanan Aktif</h3>
+        <p class="text-sm text-text-muted mb-4">
+          {{ bookedSeatsData.length }} kursi memiliki pemesanan aktif. Anda dapat mengubah posisinya sebelum menyimpan denah baru.
+        </p>
+        <div class="space-y-3 mb-4">
+          <div
+            v-for="seat in bookedSeatsData"
+            :key="seat.id"
+            class="p-3 rounded-xl bg-surface border border-border/50"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-semibold text-text-heading">{{ seat.seat_code }}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-medium">{{ seat.status }}</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] font-semibold text-text-muted block mb-0.5">Posisi X</label>
+                <input
+                  v-model.number="seatReassignments[seat.id].newX"
+                  type="number"
+                  min="0"
+                  class="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label class="text-[10px] font-semibold text-text-muted block mb-0.5">Posisi Y</label>
+                <input
+                  v-model.number="seatReassignments[seat.id].newY"
+                  type="number"
+                  min="0"
+                  class="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button
+            class="px-4 py-2 text-sm font-semibold text-text-muted hover:text-text-heading transition-colors cursor-pointer"
+            @click="seatConflictModal = false"
+          >Batal</button>
+          <button
+            class="px-4 py-2 text-sm font-semibold bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors cursor-pointer"
+            @click="submitReassignments"
+          >Simpan Posisi Baru</button>
+        </div>
+      </div>
+    </div>
     </template>
-  </AppLayout>
 </template>

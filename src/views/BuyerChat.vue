@@ -46,6 +46,11 @@ const loadingMore = ref(false)
 const chatChannel = ref<any>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
+const visibleCount = ref(5)
+const displayedThreads = computed(() => threads.value.slice(0, visibleCount.value))
+const hasMoreThreads = computed(() => threads.value.length > visibleCount.value)
+const loadMoreThreads = () => { visibleCount.value += 5 }
+
 // Payment proof form
 const showProofForm = ref(false)
 const proofFile = ref<File | null>(null)
@@ -183,6 +188,8 @@ const sendMessage = async () => {
   messageText.value = ''
   sending.value = true
 
+  const idempotencyKey = crypto.randomUUID?.() ?? Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
+
   const optimistic: Message = {
     id: 'temp_' + Date.now(),
     thread_id: activeThread.value.id,
@@ -197,7 +204,7 @@ const sendMessage = async () => {
   const res = await fetchWithRetry(`/api/chat/thread/${activeThread.value.id}/messages`, {
     method: 'POST',
     body: JSON.stringify({ content, message_type: 'text' }),
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }
   })
 
   if (res.ok) {
@@ -390,8 +397,8 @@ onUnmounted(() => {
 
 <template>
   <AppLayout title="Chat Penyelenggara">
-    <div class="px-4 md:px-6 py-6 max-w-6xl mx-auto">
-      <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="h-dvh flex flex-col overflow-hidden px-4 md:px-6 max-w-6xl mx-auto">
+      <div class="shrink-0 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 class="text-xl font-heading font-bold text-text-heading">Chat Penyelenggara</h1>
           <p class="text-sm text-text-muted mt-1">Lihat percakapan tiket kamu dengan penyelenggara acara.</p>
@@ -399,7 +406,7 @@ onUnmounted(() => {
         <BackButton label="Kembali" />
       </div>
 
-      <div class="flex flex-col md:flex-row flex-1 overflow-hidden rounded-3xl border border-border/50 bg-surface-card min-h-[500px]">
+      <div class="flex flex-col md:flex-row flex-1 overflow-hidden rounded-3xl border border-border/50 bg-surface-card">
         <div :class="['md:w-80 border-r border-border/50 bg-surface-card overflow-y-auto', activeThread ? 'hidden md:block' : '']">
           <div class="p-4 border-b border-border/50">
             <h2 class="font-semibold text-text-heading">Percakapan</h2>
@@ -419,7 +426,7 @@ onUnmounted(() => {
 
             <div v-else class="divide-y divide-border/30">
               <button
-                v-for="thread in threads"
+                v-for="thread in displayedThreads"
                 :key="thread.id"
                 @click="openThread(thread)"
                 class="w-full text-left p-4 hover:bg-surface/50 transition-colors cursor-pointer"
@@ -444,12 +451,20 @@ onUnmounted(() => {
                   </div>
                 </div>
               </button>
+              <div v-if="hasMoreThreads" class="p-3 text-center">
+                <button
+                  class="px-4 py-1.5 text-xs font-semibold text-primary border border-primary/30 rounded-full hover:bg-primary/5 transition-colors cursor-pointer"
+                  @click="loadMoreThreads"
+                >
+                  Muat lebih banyak ({{ threads.length - visibleCount }})
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <div :class="['flex-1 flex flex-col overflow-hidden', !activeThread ? 'hidden md:flex' : '']">
-          <div class="px-5 py-4 border-b border-border/50 bg-surface-card">
+          <div class="shrink-0 px-5 py-4 border-b border-border/50 bg-surface-card">
             <div class="flex items-center gap-3">
               <button class="md:hidden cursor-pointer" @click="activeThread = null">
                 <span class="material-symbols-outlined">arrow_back</span>
@@ -575,7 +590,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="activeThread?.is_active" class="p-4 border-t border-border/50 bg-surface-card">
+          <div v-if="activeThread?.is_active" class="shrink-0 p-4 border-t border-border/50 bg-surface-card">
             <form @submit.prevent="sendMessage" class="flex gap-2">
               <button
                 type="button"
@@ -602,7 +617,7 @@ onUnmounted(() => {
               </button>
             </form>
           </div>
-          <div v-else class="p-4 border-t border-border/50 bg-surface-card text-center">
+          <div v-else class="shrink-0 p-4 border-t border-border/50 bg-surface-card text-center">
             <p class="text-xs text-text-muted">Percakapan ini sudah ditutup</p>
           </div>
         </div>

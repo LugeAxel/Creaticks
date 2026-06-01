@@ -6,6 +6,7 @@ import { useAuth } from '@/composables/useAuth'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BaseInput from '@/components/shared/BaseInput.vue'
 import HCaptcha from '@/components/shared/HCaptcha.vue'
+import BackButton from '@/components/shared/BackButton.vue'
 
 const router = useRouter()
 const { signUp } = useAuth()
@@ -15,6 +16,7 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const role = ref<'creator' | 'buyer'>('buyer')
+const termsAgreed = ref(false)
 const loading = ref(false)
 const error = ref('')
 
@@ -49,6 +51,11 @@ const handleSignUp = async () => {
     return
   }
 
+  if (!termsAgreed.value) {
+    error.value = 'Harap setujui Syarat & Ketentuan'
+    return
+  }
+
   if (!captchaToken.value) {
     error.value = 'Harap selesaikan verifikasi keamanan'
     return
@@ -57,7 +64,7 @@ const handleSignUp = async () => {
   loading.value = true
 
   const { error: signUpError } = await signUp(email.value, password.value, {
-    data: { name: name.value, role: role.value },
+    data: { name: name.value, role: role.value, terms_accepted: true },
     captchaToken: captchaToken.value
   })
 
@@ -72,11 +79,13 @@ const handleSignUp = async () => {
 
   router.push({ name: 'email-verification', query: { email: email.value } })
 }
+
 </script>
 
 <template>
   <div class="min-h-screen bg-surface flex items-center justify-center px-6 py-12">
     <div class="w-full max-w-sm">
+      <BackButton/>
       <div class="text-center mb-8">
         <h1 class="text-2xl font-heading font-bold text-text-heading mb-2">Daftar</h1>
         <p class="text-sm text-text-muted">Buat akun Creaticks baru</p>
@@ -109,6 +118,21 @@ const handleSignUp = async () => {
             </button>
           </div>
         </div>
+
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input
+            v-model="termsAgreed"
+            type="checkbox"
+            class="mt-0.5 w-4 h-4 shrink-0 accent-primary"
+          />
+          <span class="text-xs text-text-muted leading-relaxed">
+            Saya menyetujui
+            <router-link :to="{ name: 'syarat-dan-ketentuan' }" class="text-primary hover:underline" target="_blank">
+              Syarat &amp; Ketentuan
+            </router-link>
+            dan memahami bahwa transaksi dilakukan langsung dengan Kreator.
+          </span>
+        </label>
 
         <div class="flex justify-center">
           <HCaptcha

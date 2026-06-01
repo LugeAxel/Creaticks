@@ -37,6 +37,8 @@ const currentUser = ref<User | null>(null)
 
 supabase.auth.getUser().then(({ data }) => {
   currentUser.value = data?.user || null
+}).catch(() => {
+  currentUser.value = null
 })
 
 const ROLES_LABELS: Record<string, string> = {

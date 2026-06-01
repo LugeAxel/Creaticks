@@ -1,0 +1,183 @@
+
+<style>
+  .tnc { max-width: 660px; margin: 0 auto; padding: 2rem 0; font-family: var(--font-sans); }
+  .tnc-header { margin-bottom: 2rem; padding-bottom: 1.25rem; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .tnc-logo { font-size: 20px; font-weight: 500; color: #6C63FF; letter-spacing: -0.5px; margin: 0 0 6px; }
+  .tnc-title { font-size: 22px; font-weight: 500; color: var(--color-text-primary); margin: 0 0 6px; }
+  .tnc-meta { font-size: 13px; color: var(--color-text-secondary); margin: 0; }
+  .tnc-intro { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem 1.25rem; margin-bottom: 2rem; font-size: 14px; color: var(--color-text-secondary); line-height: 1.7; }
+  .tnc-intro strong { color: var(--color-text-primary); font-weight: 500; }
+  .section { margin-bottom: 1.75rem; }
+  .section-title { font-size: 16px; font-weight: 500; color: var(--color-text-primary); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .section-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #6C63FF; color: #fff; font-size: 11px; font-weight: 500; flex-shrink: 0; }
+  .section-body { font-size: 14px; color: var(--color-text-secondary); line-height: 1.75; padding-left: 30px; }
+  .section-body ul { margin: 8px 0 0; padding: 0; list-style: none; }
+  .section-body ul li { padding: 4px 0; display: flex; gap: 8px; }
+  .section-body ul li::before { content: '—'; color: var(--color-text-tertiary); flex-shrink: 0; }
+  .highlight { color: var(--color-text-primary); font-weight: 500; }
+  .divider { height: 0.5px; background: var(--color-border-tertiary); margin: 2rem 0; }
+  .agree-box { background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-top: 2rem; }
+  .agree-check { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 1rem; cursor: pointer; }
+  .agree-check input[type=checkbox] { margin-top: 2px; width: 16px; height: 16px; flex-shrink: 0; accent-color: #6C63FF; }
+  .agree-label { font-size: 14px; color: var(--color-text-primary); line-height: 1.6; }
+  .agree-label span { color: #6C63FF; }
+  .agree-btn { width: 100%; padding: 10px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: #6C63FF; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; opacity: 0.4; transition: opacity 0.2s; pointer-events: none; }
+  .agree-btn.active { opacity: 1; pointer-events: all; }
+  .agree-btn.active:hover { opacity: 0.88; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: var(--border-radius-md); margin-left: 4px; vertical-align: middle; }
+  .tag-important { background: var(--color-background-danger); color: var(--color-text-danger); }
+  .tag-new { background: var(--color-background-info); color: var(--color-text-info); }
+</style>
+
+<div class="tnc">
+  <div class="tnc-header">
+    <p class="tnc-logo">✦ Creatick</p>
+    <h1 class="tnc-title">Terms &amp; Conditions</h1>
+    <p class="tnc-meta">Effective: June 2026 &nbsp;·&nbsp; Version 1.0 &nbsp;·&nbsp; Bahasa Indonesia &amp; English</p>
+  </div>
+
+  <div class="tnc-intro">
+    <strong>Sebelum menggunakan Creatick, baca ini dulu.</strong> Singkatnya: Creatick adalah platform pembuatan dan manajemen tiket digital untuk acara kecil. Kami menyediakan alatnya — kamu yang bertanggung jawab atas acaramu dan transaksimu. Kalau ada yang tidak setuju dengan syarat ini, jangan gunakan platform kami.
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">1</span> Siapa kita</div>
+    <div class="section-body">
+      Creatick adalah platform digital yang memungkinkan <span class="highlight">Kreator</span> membuat acara dan menjual tiket, <span class="highlight">Admin</span> membantu mengelola acara, dan <span class="highlight">Pembeli</span> membeli tiket secara digital. Creatick bukan penyelenggara acara — kami hanya menyediakan infrastruktur digitalnya.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">2</span> Akun &amp; identitas</div>
+    <div class="section-body">
+      <ul>
+        <li>Kamu harus membuat akun untuk menggunakan Creatick. Data yang kamu masukkan harus akurat dan terkini.</li>
+        <li>Kamu bertanggung jawab atas keamanan akunmu. Jangan bagikan password ke siapapun.</li>
+        <li>Satu orang, satu akun. Pembuatan akun ganda untuk memanipulasi sistem (war tiket, spam request, dll) adalah pelanggaran serius.</li>
+        <li>Creatick berhak menonaktifkan akun yang melanggar syarat ini tanpa pemberitahuan.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">3</span> Transaksi &amp; pembayaran <span class="tag tag-important">Penting</span></div>
+    <div class="section-body">
+      Creatick menggunakan sistem <span class="highlight">chat-based transaction</span> — pembayaran dilakukan langsung antara Pembeli dan Kreator di luar platform Creatick (transfer bank, dompet digital, dll).
+      <ul>
+        <li>Creatick <strong>tidak memproses, menyimpan, atau menjamin</strong> pembayaran apapun.</li>
+        <li>Kreator bertanggung jawab penuh atas konfirmasi pembayaran dan penerbitan tiket.</li>
+        <li>Jika terjadi sengketa pembayaran, Creatick hanya bisa menyediakan riwayat chat sebagai referensi — bukan sebagai arbiter.</li>
+        <li>Bukti transfer yang dikirim di chat wajib asli. Pemalsuan bukti transfer adalah tindakan penipuan dan dapat dilaporkan ke pihak berwajib.</li>
+        <li>Tiket hanya diterbitkan dan berlaku setelah Kreator atau Admin mengkonfirmasi pembayaran.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">4</span> Tiket &amp; kehadiran</div>
+    <div class="section-body">
+      <ul>
+        <li>Tiket berstatus <span class="highlight">Owned</span> adalah satu-satunya tiket yang valid untuk masuk ke acara.</li>
+        <li>QR code tiket bersifat unik dan tidak dapat dipindahtangankan kecuali Kreator mengizinkan transfer.</li>
+        <li>Pemalsuan, duplikasi, atau modifikasi QR code tiket adalah pelanggaran serius dan batalkan akses.</li>
+        <li>Creatick tidak bertanggung jawab atas penolakan masuk akibat tiket tidak valid, rusak, atau expired.</li>
+        <li>Data tiket dan acara akan <span class="highlight">otomatis dihapus 14 hari</span> setelah acara selesai, kecuali diarsipkan oleh Kreator.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">5</span> Kewajiban Kreator</div>
+    <div class="section-body">
+      Sebagai Kreator, kamu setuju bahwa:
+      <ul>
+        <li>Informasi acara yang kamu buat (nama, tanggal, lokasi, harga) adalah akurat dan tidak menyesatkan.</li>
+        <li>Kamu memiliki hak atau izin untuk menyelenggarakan acara tersebut di lokasi yang dicantumkan.</li>
+        <li>Kamu bertanggung jawab atas kebijakan refund yang kamu tetapkan dan wajib menghormatinya.</li>
+        <li>Jika acara dibatalkan, kamu wajib menginformasikan semua pemegang tiket dan memproses refund sesuai kebijakanmu.</li>
+        <li>Kamu tidak boleh membuat acara untuk kegiatan ilegal, penipuan, atau yang melanggar hak orang lain.</li>
+        <li>Pendelegasian akses Admin adalah tanggung jawabmu — tindakan Admin di platformmu adalah tanggung jawabmu juga.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">6</span> Kewajiban Pembeli</div>
+    <div class="section-body">
+      <ul>
+        <li>Pastikan data yang kamu masukkan saat request tiket akurat (nama, jumlah tiket, dll).</li>
+        <li>Kirimkan bukti pembayaran yang asli dan sesuai — jangan mengirim bukti palsu atau yang sudah digunakan.</li>
+        <li>Tiket yang sudah dikonfirmasi (Owned) tidak dapat dikembalikan kecuali Kreator memiliki kebijakan refund.</li>
+        <li>Hadir ke acara dengan tiket QR yang valid. Creatick tidak bertanggung jawab atas ketidakhadiran.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">7</span> Privasi &amp; data</div>
+    <div class="section-body">
+      <ul>
+        <li>Creatick mengumpulkan data yang kamu berikan (nama, email, riwayat tiket) untuk menjalankan layanan.</li>
+        <li>Kami tidak menjual datamu ke pihak ketiga.</li>
+        <li>Riwayat chat antara Pembeli dan Kreator/Admin disimpan selama acara aktif dan dihapus bersama data acara setelah 14 hari (atau saat diarsipkan).</li>
+        <li>Kamu berhak meminta penghapusan akunmu dengan menghubungi tim Creatick.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">8</span> Batasan tanggung jawab</div>
+    <div class="section-body">
+      Creatick menyediakan platform <span class="highlight">sebagaimana adanya</span>. Kami tidak bertanggung jawab atas:
+      <ul>
+        <li>Kerugian finansial akibat sengketa pembayaran antara Pembeli dan Kreator.</li>
+        <li>Acara yang dibatalkan, diubah, atau tidak sesuai ekspektasi.</li>
+        <li>Kehilangan data akibat penghapusan otomatis setelah 14 hari jika tidak diarsipkan.</li>
+        <li>Gangguan layanan (downtime) yang bersifat sementara.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">9</span> Larangan penggunaan</div>
+    <div class="section-body">
+      Kamu dilarang menggunakan Creatick untuk:
+      <ul>
+        <li>Membuat acara fiktif atau penipuan untuk mengumpulkan uang.</li>
+        <li>Menyebarkan konten yang melanggar hukum, mengandung SARA, atau berbahaya.</li>
+        <li>Melakukan manipulasi sistem (bot, spam request, race condition yang disengaja).</li>
+        <li>Mengakses data pengguna lain tanpa izin.</li>
+        <li>Menjual kembali tiket di luar platform dengan harga yang dimanipulasi (scalping).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span class="section-num">10</span> Perubahan syarat</div>
+    <div class="section-body">
+      Creatick berhak mengubah syarat ini sewaktu-waktu. Jika ada perubahan signifikan, kami akan memberitahu kamu melalui email atau notifikasi di platform. Penggunaan platform setelah pemberitahuan dianggap sebagai persetujuan terhadap syarat yang diperbarui.
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="agree-box">
+    <label class="agree-check">
+      <input type="checkbox" id="agree-cb" onchange="toggleBtn()">
+      <span class="agree-label">
+        Saya telah membaca dan menyetujui <span>Syarat &amp; Ketentuan</span> Creatick. Saya memahami bahwa transaksi dilakukan langsung dengan Kreator, dan Creatick tidak bertanggung jawab atas sengketa pembayaran.
+      </span>
+    </label>
+    <button class="agree-btn" id="agree-btn" onclick="sendPrompt('Saya sudah setuju dengan Terms & Conditions Creatick')">
+      Setuju &amp; Lanjutkan ↗
+    </button>
+  </div>
+</div>
+
+<script>
+  function toggleBtn() {
+    const cb = document.getElementById('agree-cb');
+    const btn = document.getElementById('agree-btn');
+    btn.classList.toggle('active', cb.checked);
+  }
+</script>

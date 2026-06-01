@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useToast } from '@/composables/useToast'
 import SeatMap, { type SeatData, type TierInfo } from './SeatMap.vue'
 
 const props = withDefaults(defineProps<{
@@ -67,7 +68,15 @@ async function toggleSeat(seatId: string) {
   await lockSeat(seatId)
 }
 
+const { showToast } = useToast()
+
 async function lockSeat(seatId: string) {
+  // optimistic: assume lock will succeed so UI updates instantly
+  if (!selectedSeatIds.value.includes(seatId)) {
+    selectedSeatIds.value.push(seatId)
+    emit('change', selectedSeatIds.value)
+  }
+
   pendingSeatIds.value.push(seatId)
   try {
     const res = await fetch('/api/seat-locks', {
@@ -86,16 +95,18 @@ async function lockSeat(seatId: string) {
     const data = await res.json()
 
     if (!res.ok) {
-      if (data.code === 'SEAT_UNAVAILABLE' || data.code === 'SEAT_LOCK_CONTENTION') {
-        error.value = 'Kursi sudah dipilih pengguna lain'
-      } else {
-        error.value = data.error || 'Gagal mengunci kursi'
-      }
+      // rollback optimistic selection
+      selectedSeatIds.value = selectedSeatIds.value.filter(id => id !== seatId)
+      emit('change', selectedSeatIds.value)
+
+      const msg = data?.error || (data?.code === 'SEAT_UNAVAILABLE' || data?.code === 'SEAT_LOCK_CONTENTION'
+        ? 'Kursi sudah dipilih pengguna lain' : 'Gagal mengunci kursi')
+      showToast(msg, 'error')
+      console.error('[SeatSelector] lock failed', data)
       return
     }
 
-    selectedSeatIds.value.push(seatId)
-
+    // server confirmed lock: set timers based on response
     const expiresAt = data.lock_expires_at
     const timeLeft = new Date(expiresAt).getTime() - Date.now()
 
@@ -109,9 +120,15 @@ async function lockSeat(seatId: string) {
       lockTimers.value[seatId] = { expiresAt, interval }
     }
 
+    // ensure it's present (it may already be from optimistic add)
+    if (!selectedSeatIds.value.includes(seatId)) selectedSeatIds.value.push(seatId)
     emit('change', selectedSeatIds.value)
-  } catch {
-    error.value = 'Gagal menghubungi server'
+  } catch (err) {
+    // rollback and notify
+    selectedSeatIds.value = selectedSeatIds.value.filter(id => id !== seatId)
+    emit('change', selectedSeatIds.value)
+    showToast('Gagal menghubungi server saat memilih kursi', 'error')
+    console.error('[SeatSelector] lock error', err)
   } finally {
     pendingSeatIds.value = pendingSeatIds.value.filter(id => id !== seatId)
   }
@@ -120,18 +137,25 @@ async function lockSeat(seatId: string) {
 async function releaseSeat(seatId: string) {
   if (pendingSeatIds.value.includes(seatId)) return
   pendingSeatIds.value.push(seatId)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
   try {
-    await fetch(`/api/seat-locks/${seatId}`, {
+    const res = await fetch(`/api/seat-locks/${seatId}`, {
       method: 'DELETE',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${props.authToken}`
       },
       body: JSON.stringify({ sessionId: props.sessionId })
     })
-  } catch {
-    // best-effort release
+    if (!res.ok) {
+      console.warn('[SeatSelector] releaseSeat server returned', res.status)
+    }
+  } catch (e) {
+    console.warn('[SeatSelector] releaseSeat failed:', e)
   } finally {
+    clearTimeout(timeout)
     pendingSeatIds.value = pendingSeatIds.value.filter(id => id !== seatId)
   }
 

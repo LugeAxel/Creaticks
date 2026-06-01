@@ -19,8 +19,8 @@ export function usePurchaseTicker() {
       if (res.ok) {
         purchases.value = await res.json()
       }
-    } catch {
-      // silent
+    } catch (e) {
+      console.warn('Failed to fetch latest purchases:', e)
     }
   }
 

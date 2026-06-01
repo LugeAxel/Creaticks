@@ -47,8 +47,8 @@ const fetchScanSecret = async () => {
       const data = await res.json()
       scanSecret.value = data.scan_secret
     }
-  } catch {
-    // proceed without secret
+  } catch (e) {
+    console.warn('Failed to fetch scan secret, proceeding without it:', e)
   }
 }
 
@@ -214,8 +214,8 @@ const decodeQrFromImage = async (file: File) => {
       scanLocked = true
       validateTicket(result)
     }
-  } catch {
-    // no QR detected
+  } catch (e) {
+    console.warn('Failed to decode QR from image:', e)
   } finally {
     isDecodingImage.value = false
     if (fileInput.value) fileInput.value.value = ''
@@ -229,7 +229,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (scanner) {
-    try { scanner.stop() } catch {}
+    try { scanner.stop() } catch (e) { console.warn('Failed to stop scanner:', e) }
     scanner = null
   }
 })

@@ -23,8 +23,8 @@ export function useChatUnread() {
           (sum: number, t: any) => sum + (t.unread_count || 0), 0
         )
       }
-    } catch {
-      // silent
+    } catch (e) {
+      console.warn('Failed to fetch unread count:', e)
     }
   }
 

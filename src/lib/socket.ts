@@ -17,6 +17,14 @@ export function setSocketAuthToken(token: string | null) {
     socket.disconnect()
   }
   socket.connect()
+  // re-join rooms after reconnect
+  if (socket.connected && joinedRooms.size > 0) {
+    joinedRooms.forEach(r => {
+      try { socket?.emit('join:room', { room: r }) } catch (e) {
+        console.warn('Failed to re-join room after token update:', r, e)
+      }
+    })
+  }
 }
 
 function initSocket(token: string) {
@@ -32,7 +40,9 @@ function initSocket(token: string) {
 
   socket.on('connect', () => {
     joinedRooms.forEach(r => {
-      try { socket?.emit('join:room', { room: r }) } catch (e) {}
+      try { socket?.emit('join:room', { room: r }) } catch (e) {
+        console.warn('Failed to join room on reconnect:', r, e)
+      }
     })
   })
 
@@ -59,7 +69,11 @@ export function joinRoom(room: string) {
 export function leaveRoom(room: string) {
   joinedRooms.delete(room)
   const s = socket
-  if (s?.connected) s.emit('leave:room', { room })
+  if (s?.connected) {
+    try { s.emit('leave:room', { room }) } catch (e) {
+      console.warn('Failed to leave room:', room, e)
+    }
+  }
 }
 
 export function onEvent(ev: string, cb: (...args: any[]) => void) {

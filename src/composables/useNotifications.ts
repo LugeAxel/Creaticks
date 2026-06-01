@@ -18,10 +18,11 @@ const notifications = ref<NotificationItem[]>([])
 const unreadCount = ref(0)
 const loading = ref(false)
 
+let notifChannel: ReturnType<typeof supabase.channel> | null = null
+let rolesChannel: ReturnType<typeof supabase.channel> | null = null
+
 export function useNotifications() {
   const { user } = useAuth()
-  let notifChannel: ReturnType<typeof supabase.channel> | null = null
-  let rolesChannel: ReturnType<typeof supabase.channel> | null = null
 
   const fetchNotifications = async () => {
     if (!user.value) return

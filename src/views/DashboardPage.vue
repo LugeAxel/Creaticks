@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { fetchWithoutAuth } from '@/lib/api'
+import { useAdminEvents } from '@/composables/useAdminEvents'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import EventCard from '@/components/shared/EventCard.vue'
@@ -10,6 +11,10 @@ import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 import type { User } from '@supabase/supabase-js'
 
 const router = useRouter()
+const {
+  adminEvents,
+  fetchMyEvents: fetchAdminEvents
+} = useAdminEvents()
 const user = ref<User | null>(null)
 const upcomingEvents = ref<any[]>([])
 const activeTickets = ref<any[]>([])
@@ -139,15 +144,15 @@ const fetchData = async () => {
     // Fetch global platform stats
     const statsRes = await fetchWithoutAuth('/api/stats')
     if (statsRes.ok) globalStats.value = await statsRes.json()
-  } catch {
-    // fail silently
+  } catch (e) {
+    console.warn('Failed to fetch dashboard data:', e)
   }
 }
 
 onMounted(async () => {
   const { data: { session } } = await supabase.auth.getSession()
   user.value = session?.user ?? null
-  await fetchData()
+  await Promise.all([fetchData(), fetchAdminEvents()])
   loading.value = false
 })
 </script>
@@ -348,6 +353,55 @@ onMounted(async () => {
                   <BaseButton variant="primary" size="sm" fullWidth @click="router.push(`/tickets/${ticket.id}`)">
                     Tampilkan QR
                   </BaseButton>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Events -->
+        <div v-if="adminEvents.length > 0">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-text-heading/50 uppercase tracking-wide">Acara yang Kamu Bantu</h2>
+            <button class="text-xs font-semibold text-primary hover:underline cursor-pointer" @click="router.push('/admin')">
+              Lihat Semua
+            </button>
+          </div>
+          <div class="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
+            <div
+              v-for="ev in adminEvents"
+              :key="ev.id"
+              class="min-w-[260px] md:min-w-[300px] snap-start shrink-0"
+            >
+              <div class="bg-surface-card rounded-2xl border border-border/50 overflow-hidden shadow-sm">
+                <div
+                  class="relative h-[120px] bg-gradient-to-br from-accent to-warning"
+                  style="clip-path: polygon(0 0, 100% 0, 100% 82%, 0 100%)"
+                >
+                  <div
+                    class="absolute inset-0 opacity-10"
+                    style="background-image: radial-gradient(circle, #fff 1px, transparent 1px); background-size: 16px 16px;"
+                  />
+                  <div class="absolute bottom-5 left-4 right-4">
+                    <h3 class="text-white font-heading font-bold text-base drop-shadow-sm truncate">{{ ev.title }}</h3>
+                    <p class="text-white/70 text-xs mt-0.5">{{ formatDate(ev.date) }}</p>
+                  </div>
+                </div>
+                <div class="px-4 py-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <p class="text-sm text-text-heading/70 truncate">{{ ev.location || 'Lokasi tidak diketahui' }}</p>
+                    <span class="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20 shrink-0 ml-2">
+                      Admin
+                    </span>
+                  </div>
+                  <div class="flex gap-2">
+                    <BaseButton variant="accent" size="sm" class="flex-1" @click="router.push(`/admin/events/${ev.id}/queue`)">
+                      Kelola
+                    </BaseButton>
+                    <BaseButton variant="ghost" size="sm" @click="router.push(`/events/${ev.id}`)">
+                      Lihat
+                    </BaseButton>
+                  </div>
                 </div>
               </div>
             </div>

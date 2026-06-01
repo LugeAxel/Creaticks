@@ -1,9 +1,12 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { verifyAdminScope } from '../middleware/adminScope.js'
+import { idempotencyMiddleware } from '../utils/idempotency.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
 import { logAdminAction } from '../lib/audit.js'
+
+const MAX_CONTENT_LENGTH = 5000
 
 const router = Router()
 
@@ -263,12 +266,15 @@ router.put('/thread/:threadId/read', requireAuth, async (req, res) => {
   res.json({ ok: true })
 })
 
-router.post('/thread/:threadId/messages', requireAuth, async (req, res) => {
+router.post('/thread/:threadId/messages', idempotencyMiddleware, requireAuth, async (req, res) => {
   const { threadId } = req.params
   const { content, message_type, image_url } = req.body
 
   if (!content || !content.trim()) {
     return res.status(400).json({ error: 'Pesan tidak boleh kosong' })
+  }
+  if (content.length > MAX_CONTENT_LENGTH) {
+    return res.status(400).json({ error: `Pesan maksimal ${MAX_CONTENT_LENGTH} karakter` })
   }
 
   const thread = await canAccessThread(threadId, req.user.id)

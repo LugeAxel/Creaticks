@@ -36,8 +36,8 @@ onMounted(async () => {
       const data = await res.json()
       events.value = data.events || []
     }
-  } catch {
-    // fallback
+  } catch (e) {
+    console.warn('Failed to fetch admin events:', e)
   } finally {
     loading.value = false
   }

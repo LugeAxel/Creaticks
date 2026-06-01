@@ -1,4 +1,9 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
+
+@import "tw-animate-css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -101,6 +106,12 @@ body {
     font-family: var(--font-heading);
     color: var(--color-text-heading);
   }
+  .maplibregl-popup-content {
+    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+  }
+  .maplibregl-popup-tip {
+    @apply hidden!;
+  }
 }
 
 .material-symbols-outlined {
@@ -143,4 +154,16 @@ body {
   --color-inverse-on-surface: #1A1D23;
   --color-outline: #3A3D45;
   --color-outline-variant: #2E3138;
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
 }

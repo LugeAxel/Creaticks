@@ -8,25 +8,14 @@ function redirectToLogin() {
   setTimeout(() => { window.location.href = '/login?expired=1' }, 800)
 }
 
-let cachedToken: string | null = null
-let tokenPromise: Promise<string | null> | null = null
-
 async function getAccessToken(): Promise<string | null> {
-  if (cachedToken) return cachedToken
-  if (tokenPromise) return tokenPromise
-  tokenPromise = (async () => {
-    const { data } = await supabase.auth.getSession()
-    cachedToken = data.session?.access_token || null
-    tokenPromise = null
-    return cachedToken
-  })()
-  return tokenPromise
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token || null
 }
 
 async function refreshAndRetry(url: string, opts: RequestInit): Promise<Response> {
   const { data } = await supabase.auth.refreshSession()
   if (data.session?.access_token) {
-    cachedToken = data.session.access_token
     const newOpts: RequestInit = {
       ...opts,
       headers: {

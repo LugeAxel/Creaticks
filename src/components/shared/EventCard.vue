@@ -100,6 +100,11 @@ const soldPct = computed(() =>
   totalQuota.value > 0 ? totalSold.value / totalQuota.value : 0
 )
 
+const isAllSoldOut = computed(() => {
+  const tiers = props.event.ticket_tiers || []
+  return tiers.length > 0 && tiers.every((t: any) => (t.sold_count || 0) >= (t.quota || 0) && t.quota > 0)
+})
+
 const activeBadge = computed<{ label: string; classes: string; pulse?: boolean } | null>(() => {
   if (!props.event.ticket_tiers?.length) return null
 
@@ -108,11 +113,11 @@ const activeBadge = computed<{ label: string; classes: string; pulse?: boolean }
   const soldOver90 = totalQuota.value > 0 && soldPct.value >= 0.9
   const soldOver70 = totalQuota.value > 0 && soldPct.value >= 0.7
 
-  if (soldOver90) return {
-    label: 'HAMPIR HABIS',
-    classes: 'bg-gradient-to-r from-[#FFB347] to-[#FF6B35]'
+  if (isAllSoldOut.value) return {
+    label: 'HABIS',
+    classes: 'bg-gradient-to-r from-[#FF3B3B] to-[#E74C3C]'
   }
-  if (soldOver70) return {
+  if (soldOver90) return {
     label: 'HOT',
     classes: 'bg-gradient-to-r from-[#FF6584] to-[#FF4757]',
     pulse: true
@@ -169,7 +174,10 @@ function updateCountdown(target: number) {
 }
 
 onMounted(() => startCountdown())
-onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer) })
+onUnmounted(() => {
+  if (countdownTimer) clearInterval(countdownTimer)
+  if (carouselTimer) clearInterval(carouselTimer)
+})
 
 function hashCode(s: string) {
   let hash = 0
@@ -183,12 +191,6 @@ function hashCode(s: string) {
 function formatDateShort(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('id-ID', {
     day: 'numeric', month: 'short', year: 'numeric'
-  })
-}
-
-function formatDateFull(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('id-ID', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   })
 }
 

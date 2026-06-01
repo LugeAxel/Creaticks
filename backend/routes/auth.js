@@ -1,7 +1,11 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
+import { verifyCaptcha } from '../middleware/captcha.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
+
+const MAX_NAME_LENGTH = 100
+const MAX_PHONE_LENGTH = 20
 
 const router = Router()
 
@@ -26,9 +30,16 @@ router.get('/me', requireAuth, async (req, res) => {
   })
 })
 
-router.put('/profile', requireAuth, async (req, res) => {
+router.put('/profile', requireAuth, verifyCaptcha, async (req, res) => {
   const { name, phone, avatar_url } = req.body
   const token = req.headers.authorization.split(' ')[1]
+
+  if (name && name.length > MAX_NAME_LENGTH) {
+    return res.status(400).json({ error: `Nama maksimal ${MAX_NAME_LENGTH} karakter` })
+  }
+  if (phone && phone.length > MAX_PHONE_LENGTH) {
+    return res.status(400).json({ error: `Nomor telepon maksimal ${MAX_PHONE_LENGTH} karakter` })
+  }
 
   const metadata = {}
   if (name !== undefined) metadata.name = name

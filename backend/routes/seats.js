@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { verifyAdminScope } from '../middleware/adminScope.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
+import { createNotification } from './notifications.js'
 
 const router = Router()
 
@@ -224,6 +225,21 @@ router.post('/events/:eventId/seats/generate', requireAuth, async (req, res) => 
     return res.status(403).json({ error: 'Hanya kreator yang dapat generate kursi' })
   }
 
+  // Check for booked seats — prevent data loss
+  const { data: bookedSeats } = await supabaseAdmin
+    .from('venue_seats')
+    .select('id, seat_code, x, y, status, tier_id')
+    .eq('event_id', eventId)
+    .in('status', ['reserved', 'owned', 'checked_in'])
+
+  if (bookedSeats && bookedSeats.length > 0) {
+    return res.status(409).json({
+      error: `${bookedSeats.length} kursi memiliki pemesanan aktif. Atur ulang posisi kursi tersebut atau lepaskan sebelum mengubah denah.`,
+      code: 'BOOKED_SEATS_EXIST',
+      bookedSeats
+    })
+  }
+
   // Delete existing seats for this event (re-generate)
   const { error: deleteError } = await supabaseAdmin
     .from('venue_seats')
@@ -316,6 +332,94 @@ router.post('/events/:eventId/seats/generate', requireAuth, async (req, res) => 
     message: `${insertedCount} kursi berhasil dibuat`,
     count: insertedCount
   })
+})
+
+// Reassign booked seat positions (after a layout change)
+router.put('/events/:eventId/seats/reassign', requireAuth, async (req, res) => {
+  const { eventId } = req.params
+  const { seats } = req.body
+
+  if (!seats || !Array.isArray(seats) || seats.length === 0) {
+    return res.status(400).json({ error: 'Data kursi wajib diisi' })
+  }
+
+  // Verify creator
+  const { data: event } = await supabaseAdmin
+    .from('events')
+    .select('creator_id')
+    .eq('id', eventId)
+    .single()
+
+  if (!event || event.creator_id !== req.user.id) {
+    return res.status(403).json({ error: 'Hanya kreator yang dapat mengatur ulang kursi' })
+  }
+
+  const errors = []
+  for (const s of seats) {
+    if (!s.id || s.x === undefined || s.y === undefined) {
+      errors.push({ seatId: s.id, error: 'id, x, y wajib diisi' })
+      continue
+    }
+
+    // Generate new seat code based on new position
+    const seatCode = `${String.fromCharCode(65 + s.y)}${s.x + 1}`
+
+    const { error: updateError } = await supabaseAdmin
+      .from('venue_seats')
+      .update({ x: s.x, y: s.y, seat_code: seatCode })
+      .eq('id', s.id)
+      .eq('event_id', eventId)
+
+    if (updateError) {
+      errors.push({ seatId: s.id, error: updateError.message })
+    }
+  }
+
+  if (errors.length > 0) {
+    return res.status(500).json({ error: 'Beberapa kursi gagal diperbarui', errors })
+  }
+
+  // Notify buyers whose seats were reassigned
+  try {
+    const seatIds = seats.map(s => s.id)
+    const { data: updatedSeats } = await supabaseAdmin
+      .from('venue_seats')
+      .select('id, seat_code, reserved_by')
+      .in('id', seatIds)
+      .not('reserved_by', 'is', null)
+
+    const trIds = [...new Set((updatedSeats || []).map(s => s.reserved_by).filter(Boolean))]
+    if (trIds.length > 0) {
+      const { data: ticketRequests } = await supabaseAdmin
+        .from('ticket_requests')
+        .select('id, user_id, tier_name')
+        .in('id', trIds)
+
+      const requestMap = Object.fromEntries((ticketRequests || []).map(tr => [tr.id, tr]))
+      for (const s of (updatedSeats || [])) {
+        const tr = requestMap[s.reserved_by]
+        if (!tr) continue
+        await createNotification(
+          tr.user_id,
+          'seat_reassigned',
+          'Kursi Berubah',
+          `Kursi Anda telah dipindahkan ke posisi baru: ${s.seat_code}`,
+          eventId,
+          'event'
+        )
+      }
+    }
+  } catch (notifErr) {
+    logger.warn('SEATS-REASSIGN', 'Failed to send reassign notifications', { eventId, error: notifErr?.message || String(notifErr) })
+  }
+
+  logger.info('SEATS-REASSIGN', 'Booked seats reassigned', {
+    requestId: req.requestId,
+    eventId,
+    count: seats.length
+  })
+
+  res.json({ message: `${seats.length} kursi berhasil diperbarui` })
 })
 
 export default router

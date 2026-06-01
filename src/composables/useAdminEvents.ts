@@ -64,7 +64,8 @@ export function useAdminEvents() {
           seen.add(e.id)
           return true
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      } catch {
+      } catch (e) {
+        console.warn('Failed to fetch events:', e)
         myEvents.value = []
       } finally {
         loading.value = false

@@ -37,7 +37,7 @@ const main = async () => {
 
   app.set('trust proxy', 1)
   app.use(helmet())
-  app.use(cors({ origin: process.env.FRONTEND_URL} || 'http://localhost:5173' ))
+  app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }))
   app.use(express.json({ limit: '10mb' }))
   app.use(logger.request)
   app.use(logger.response)
@@ -247,10 +247,11 @@ const main = async () => {
 
   // Configure node-cron scheduler running every 2 minutes
   cron.schedule('*/2 * * * *', async () => {
-    const nowStr = new Date().toISOString()
-    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+    try {
+      const nowStr = new Date().toISOString()
+      const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
 
-    // 1. Configurable auto-release of claimed queue items
+      // 1. Configurable auto-release of claimed queue items
     const { data: activeClaims, error: claimsError } = await supabaseAdmin
       .from('ticket_requests')
       .select('id, event_id, claimed_by, claimed_at, events!inner(auto_release_claims_enabled, auto_release_claims_timeout)')
@@ -306,16 +307,28 @@ const main = async () => {
     }
 
     // 2. Auto-cancel unpaid tickets: payment_deadline < NOW() and status = 'pending'
+    // Step 2a: fetch expired pending tickets with event setting
     const { data: expiredPayments, error: paymentsError } = await supabaseAdmin
       .from('ticket_requests')
-      .select('id, event_id, user_id')
+      .select('id, event_id, user_id, events(id, payment_deadline_minutes)')
       .eq('status', 'pending')
       .lt('payment_deadline', nowStr)
 
     if (paymentsError) {
       logger.error('CRON-PAYMENTS', 'Failed to fetch expired payments', { error: paymentsError.message })
     } else if (expiredPayments && expiredPayments.length > 0) {
+      // Step 2b: exclude tickets that already have payment proof
+      const ids = expiredPayments.map(r => r.id)
+      const { data: paidInvoices } = await supabaseAdmin
+        .from('invoices')
+        .select('ticket_request_id')
+        .in('ticket_request_id', ids)
+        .not('proof_image_url', 'is', null)
+      const paidIds = new Set((paidInvoices || []).map(i => i.ticket_request_id))
+
       for (const req of expiredPayments) {
+        if (paidIds.has(req.id)) continue // skip already-paid tickets
+
         const { error: updateError } = await supabaseAdmin
           .from('ticket_requests')
           .update({ status: 'cancelled' })
@@ -324,9 +337,11 @@ const main = async () => {
         if (updateError) {
           logger.error('CRON-PAYMENTS', `Failed to auto-cancel request ${req.id}`, { error: updateError.message })
         } else {
+          const ev = Array.isArray(req.events) ? req.events[0] : req.events
+          const deadlineMins = ev?.payment_deadline_minutes ?? 30
           logger.info('CRON-PAYMENTS', `Auto-cancelled request ${req.id} due to payment deadline expiry`)
 
-          // Retrieve chat thread
+          // Delete the chat thread (hard-delete, cascade removes all messages)
           const { data: thread } = await supabaseAdmin
             .from('chat_threads')
             .select('id')
@@ -334,19 +349,9 @@ const main = async () => {
             .maybeSingle()
 
           if (thread) {
-            // Insert system message indicating auto-cancellation
-            await supabaseAdmin
-              .from('chat_messages')
-              .insert({
-                thread_id: thread.id,
-                sender_id: req.user_id,
-                message_type: 'system',
-                content: 'Pesanan dibatalkan karena melebihi batas waktu pembayaran 30 menit.'
-              })
-
             await supabaseAdmin
               .from('chat_threads')
-              .update({ is_active: false })
+              .delete()
               .eq('id', thread.id)
           }
 
@@ -484,6 +489,9 @@ const main = async () => {
     } catch (e) {
       logger.error('CRON-AUTOCLOSE', 'Unexpected error', { error: e?.message || String(e) })
     }
+    } catch (cronErr) {
+      logger.error('CRON', 'Unhandled error in 2-min cron cycle', { error: cronErr?.message || String(cronErr) })
+    }
   })
 
   server.listen(PORT, () => {
@@ -496,4 +504,7 @@ const main = async () => {
   })
 }
 
-main()
+main().catch(e => {
+  logger.error('SERVER', 'Startup failed', { error: e?.message || String(e) })
+  process.exit(1)
+})

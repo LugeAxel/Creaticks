@@ -17,6 +17,7 @@ interface NavItem { label: string; icon: string; route: string; requiredRoles?: 
 
 const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Overview', icon: 'dashboard', route: `/events/${eventId}/manage/overview` },
+  { label: 'Edit Acara', icon: 'edit', route: `/events/${eventId}/manage/edit`, creatorOnly: true },
   { label: 'Antrian', icon: 'queue', route: `/events/${eventId}/manage/queue`, requiredRoles: ['support'] },
   { label: 'Chat', icon: 'chat', route: `/events/${eventId}/manage/chat`, requiredRoles: ['support'] },
   { label: 'Scan QR', icon: 'qr_code_scanner', route: `/events/${eventId}/manage/scan`, requiredRoles: ['attendance'] },

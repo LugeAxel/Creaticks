@@ -3,9 +3,28 @@ import { ref, computed, onMounted } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useEventContext } from '@/composables/useEventContext'
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
+import EventHeatmap from '@/components/maps/EventHeatmap.vue'
 
 const { event } = useEventContext()
 const eventId = event.id
+
+const eventDate = computed(() => new Date(event.date))
+const showEventMap = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return eventDate.value >= today
+})
+
+const eventHeatmapPoints = computed(() => {
+  if (!event.location_lat || !event.location_lng) return []
+  return [{
+    lat: Number(event.location_lat),
+    lng: Number(event.location_lng),
+    intensity: 4,
+    label: event.title,
+    subtitle: event.location || 'Lokasi Acara'
+  }]
+})
 
 const loading = ref(true)
 
@@ -109,6 +128,24 @@ onMounted(fetchAnalytics)
           <p class="text-lg font-heading font-bold text-text-heading break-words">{{ formatPrice(analytics.total_revenue) }}</p>
           <p class="text-xs text-text-muted mt-1">Total Pendapatan</p>
         </div>
+      </div>
+
+      <div v-if="showEventMap" class="bg-surface-card rounded-2xl border border-border/50 p-5 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-sm font-semibold text-text-heading">Peta Acara Aktif</h2>
+            <p class="text-xs text-text-muted">Tampilkan lokasi acara yang akan datang atau sedang berlangsung.</p>
+          </div>
+        </div>
+        <EventHeatmap :points="eventHeatmapPoints" :zoom="6" title="Lokasi Acara" />
+      </div>
+
+      <div v-else-if="event.location_lat && event.location_lng" class="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6 text-sm text-amber-900">
+        Acara ini sudah lewat, jadi peta aktif tidak ditampilkan lagi.
+      </div>
+
+      <div v-else class="bg-surface-card rounded-2xl border border-border/50 p-5 mb-6 text-sm text-text-muted">
+        Lokasi acara belum diatur. Lengkapi data lokasi agar peta aktif dapat ditampilkan.
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

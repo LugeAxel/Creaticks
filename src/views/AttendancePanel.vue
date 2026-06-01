@@ -94,8 +94,8 @@ const fetchAttendance = async () => {
       const data = await res.json()
       tickets.value = data.tickets || []
     }
-  } catch {
-    // fallback
+  } catch (e) {
+    console.warn('Failed to fetch attendance:', e)
   } finally {
     loading.value = false
   }

@@ -66,6 +66,11 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/syarat-dan-ketentuan',
+      name: 'syarat-dan-ketentuan',
+      component: () => import('@/views/TermsPage.vue')
+    },
+    {
       path: '/creator',
       name: 'creator-dashboard',
       component: () => import('@/views/CreatorDashboard.vue'),
@@ -85,12 +90,6 @@ const router = createRouter({
     {
       path: '/creator/events/new',
       name: 'event-editor',
-      component: () => import('@/views/EventEditor.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
-    },
-    {
-      path: '/creator/events/:id/edit',
-      name: 'event-editor-edit',
       component: () => import('@/views/EventEditor.vue'),
       meta: { requiresAuth: true, requiresCreator: true }
     },
@@ -141,7 +140,9 @@ const router = createRouter({
         { path: 'chat', name: 'event-manage-chat', component: () => import('@/views/EventManageChat.vue') },
         { path: 'scan', name: 'event-manage-scan', component: () => import('@/views/EventManageScan.vue') },
         { path: 'attendance', name: 'event-manage-attendance', component: () => import('@/views/EventManageAttendance.vue') },
+        { path: 'edit', name: 'event-manage-edit', component: () => import('@/views/EventEditor.vue'), meta: { requiresAuth: true, requiresCreatorOfEvent: true } },
         { path: 'design', name: 'event-manage-design', component: () => import('@/views/EventManageDesign.vue') },
+        { path: 'design/editor', name: 'event-manage-editor', component: () => import('@/views/EventEditor.vue'), meta: { requiresAuth: true, requiresCreatorOfEvent: true } },
         { path: 'invoices', name: 'event-manage-invoices', component: () => import('@/views/EventManageInvoices.vue') },
         { path: 'settings', name: 'event-manage-settings', component: () => import('@/views/EventManageSettings.vue') },
         { path: 'admins', name: 'event-manage-admins', component: () => import('@/views/EventManageAdmins.vue') },
@@ -223,6 +224,34 @@ router.beforeEach(async (to, _from, next) => {
 
     if (to.meta.requiresCreator && role !== 'creator') {
       return next({ name: 'landing' })
+    }
+
+    // per-event creator check for routes that require the event creator specifically
+    if (to.meta.requiresCreatorOfEvent) {
+      const eventId = (to.params.eventId as string) || (to.params.id as string)
+      if (!eventId) return next({ name: 'landing' })
+      const { data: event } = await supabase
+        .from('events')
+        .select('creator_id')
+        .eq('id', eventId)
+        .single()
+      if (!event || !session || session.user.id !== event.creator_id) return next({ name: 'landing' })
+    }
+
+    // Terms & Conditions acceptance check (skip for the terms page itself)
+    if (to.name !== 'syarat-dan-ketentuan') {
+      const termsCached = sessionStorage.getItem('termsAccepted')
+      if (termsCached !== 'true') {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('terms_accepted_at')
+          .eq('id', session!.user.id)
+          .single()
+        if (profile && !profile.terms_accepted_at) {
+          return next({ name: 'syarat-dan-ketentuan', query: { redirect: to.fullPath } })
+        }
+        sessionStorage.setItem('termsAccepted', 'true')
+      }
     }
 
     if (to.name === 'landing') {

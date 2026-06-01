@@ -52,8 +52,8 @@ onUnmounted(() => {
   if (widgetId && window.hcaptcha) {
     try {
       window.hcaptcha.reset(widgetId)
-    } catch {
-      // widget already cleaned up
+    } catch (e) {
+      console.warn('hCaptcha reset failed (widget may already be cleaned up):', e)
     }
   }
 })

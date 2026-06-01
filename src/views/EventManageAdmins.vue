@@ -11,7 +11,7 @@ const eventId = route.params.eventId as string
 const {
   searchResults, searchUsers, inviteUser,
   getEventAdmins, updateAdminRoles, removeAdmin,
-  ROLES_LABELS, ROLES_ICONS, ROLES_COLORS
+  ROLES_LABELS
 } = useTeamManagement()
 
 interface RoleEntry {

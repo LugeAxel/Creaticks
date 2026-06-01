@@ -22,6 +22,31 @@ export const upload = multer({
   }
 })
 
+export function validateFileMagic(req, res, next) {
+  if (!req.file) return next()
+
+  const buf = req.file.buffer
+  const magicSignatures = {
+    'image/jpeg': [[0xFF, 0xD8, 0xFF]],
+    'image/png': [[0x89, 0x50, 0x4E, 0x47]],
+    'image/gif': [[0x47, 0x49, 0x46, 0x38]],
+    'image/webp': [[0x52, 0x49, 0x46, 0x46]]
+  }
+
+  const signatures = magicSignatures[req.file.mimetype]
+  if (!signatures) return next()
+
+  const matches = signatures.some(sig =>
+    sig.length <= buf.length && sig.every((byte, i) => buf[i] === byte)
+  )
+
+  if (!matches) {
+    return res.status(400).json({ error: 'Konten file tidak sesuai dengan format yang diklaim' })
+  }
+
+  next()
+}
+
 export async function uploadToCloudinary(buffer, folder = 'creaticks') {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(

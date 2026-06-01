@@ -15,7 +15,8 @@ const props = withDefaults(defineProps<{
     seats: EditorSeat[]
   }
   tiers: Array<{ name: string; price: number; color: string }>
-}>(), {})
+  readonly?: boolean
+}>(), { readonly: false })
 
 const emit = defineEmits<{
   'update:modelValue': [value: typeof props.modelValue]
@@ -149,70 +150,75 @@ defineExpose({ totalSeats, seatsByTier })
 
 <template>
   <div>
-    <div class="grid grid-cols-2 gap-3 mb-4">
-      <div>
-        <label class="text-xs font-semibold text-text mb-1 block">Grid X (kolom)</label>
-        <input
-          v-model.number="gridX"
-          type="number"
-          min="5"
-          max="50"
-          class="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm"
-          @change="applyGridSize"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-text mb-1 block">Grid Y (baris)</label>
-        <input
-          v-model.number="gridY"
-          type="number"
-          min="5"
-          max="30"
-          class="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm"
-          @change="applyGridSize"
-        />
-      </div>
-    </div>
-
-    <div class="flex items-center gap-3 mb-4 flex-wrap">
-      <div class="flex items-center gap-1.5 bg-surface-card rounded-xl p-1 border border-border/50">
-        <button
-          class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-          :class="selectedTool === 'paint' ? 'bg-primary text-white' : 'text-text-muted hover:text-text'"
-          @click="selectedTool = 'paint'"
-        >
-          <span class="material-symbols-outlined text-[14px] align-text-bottom">brush</span>
-          Paint
-        </button>
-        <button
-          class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-          :class="selectedTool === 'erase' ? 'bg-error text-white' : 'text-text-muted hover:text-text'"
-          @click="selectedTool = 'erase'"
-        >
-          <span class="material-symbols-outlined text-[14px] align-text-bottom">ink_eraser</span>
-          Erase
-        </button>
+    <template v-if="!readonly">
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="text-xs font-semibold text-text mb-1 block">Grid X (kolom)</label>
+          <input
+            v-model.number="gridX"
+            type="number"
+            min="5"
+            max="50"
+            class="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm"
+            @change="applyGridSize"
+          />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-text mb-1 block">Grid Y (baris)</label>
+          <input
+            v-model.number="gridY"
+            type="number"
+            min="5"
+            max="30"
+            class="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm"
+            @change="applyGridSize"
+          />
+        </div>
       </div>
 
-      <div v-if="selectedTool === 'paint'" class="flex items-center gap-1.5 flex-wrap">
-        <button
-          v-for="tier in tiers"
-          :key="tier.name"
-          class="px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all cursor-pointer"
-          :style="{
-            borderColor: selectedTierName === tier.name ? (tier.color || '#6C63FF') : 'transparent',
-            backgroundColor: (tier.color || '#6C63FF') + '20',
-            color: tier.color || '#6C63FF'
-          }"
-          @click="selectedTierName = tier.name"
-        >
-          {{ tier.name }}
-        </button>
-      </div>
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <div class="flex items-center gap-1.5 bg-surface-card rounded-xl p-1 border border-border/50">
+          <button
+            class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            :class="selectedTool === 'paint' ? 'bg-primary text-white' : 'text-text-muted hover:text-text'"
+            @click="selectedTool = 'paint'"
+          >
+            <span class="material-symbols-outlined text-[14px] align-text-bottom">brush</span>
+            Paint
+          </button>
+          <button
+            class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            :class="selectedTool === 'erase' ? 'bg-error text-white' : 'text-text-muted hover:text-text'"
+            @click="selectedTool = 'erase'"
+          >
+            <span class="material-symbols-outlined text-[14px] align-text-bottom">ink_eraser</span>
+            Erase
+          </button>
+        </div>
 
-      <div class="ml-auto text-xs text-text-muted">
-        {{ totalSeats }} kursi total
+        <div v-if="selectedTool === 'paint'" class="flex items-center gap-1.5 flex-wrap">
+          <button
+            v-for="tier in tiers"
+            :key="tier.name"
+            class="px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all cursor-pointer"
+            :style="{
+              borderColor: selectedTierName === tier.name ? (tier.color || '#6C63FF') : 'transparent',
+              backgroundColor: (tier.color || '#6C63FF') + '20',
+              color: tier.color || '#6C63FF'
+            }"
+            @click="selectedTierName = tier.name"
+          >
+            {{ tier.name }}
+          </button>
+        </div>
+
+        <div class="ml-auto text-xs text-text-muted">
+          {{ totalSeats }} kursi total
+        </div>
       </div>
+    </template>
+    <div v-else class="mb-4 px-3 py-2 bg-surface-variant rounded-lg text-xs text-text-muted">
+      Denah kursi tidak dapat diubah karena sudah memiliki data kursi.
     </div>
 
     <div
@@ -239,10 +245,10 @@ defineExpose({ totalSeats, seatsByTier })
           <template v-for="x in gridX" :key="`${x}-${y}`">
             <div
               :style="getSeatAt(x - 1, y - 1) ? getCellStyle(getSeatAt(x - 1, y - 1)!) : {}"
-              class="w-8 h-8 rounded text-[7px] font-bold flex items-center justify-center border border-dashed border-gray-200 cursor-crosshair transition-colors"
-              :class="getSeatAt(x - 1, y - 1) ? 'border-solid hover:brightness-110' : 'hover:bg-gray-100'"
-              @mousedown="onCellMouseDown(x - 1, y - 1)"
-              @mouseenter="onCellMouseEnter(x - 1, y - 1)"
+              class="w-8 h-8 rounded text-[7px] font-bold flex items-center justify-center border border-dashed border-gray-200 transition-colors"
+              :class="[getSeatAt(x - 1, y - 1) ? 'border-solid' : '', readonly ? 'cursor-default' : 'cursor-crosshair hover:brightness-110']"
+              @mousedown="!readonly && onCellMouseDown(x - 1, y - 1)"
+              @mouseenter="!readonly && onCellMouseEnter(x - 1, y - 1)"
             >
               <template v-if="getSeatAt(x - 1, y - 1)">
                 {{ getSeatAt(x - 1, y - 1)!.seatCode }}
@@ -260,6 +266,7 @@ defineExpose({ totalSeats, seatsByTier })
         </span>
       </div>
       <button
+        v-if="!readonly"
         class="text-xs text-error hover:text-error/80 font-semibold cursor-pointer"
         @click="clearAll"
       >

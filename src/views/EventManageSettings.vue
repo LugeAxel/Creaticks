@@ -20,13 +20,14 @@ const autoReleaseEnabled = ref(false)
 const autoReleaseTimeout = ref(15)
 const autoCloseEnabled = ref(false)
 const autoCloseTimeout = ref(1440)
+const paymentDeadlineMinutes = ref(30)
 
 const fetchSettings = async () => {
   loading.value = true
   try {
     const { data, error } = await supabase
       .from('events')
-      .select('claim_message_template_enabled, claim_message_template, auto_release_claims_enabled, auto_release_claims_timeout, auto_close_ticket_enabled, auto_close_ticket_timeout')
+      .select('claim_message_template_enabled, claim_message_template, auto_release_claims_enabled, auto_release_claims_timeout, auto_close_ticket_enabled, auto_close_ticket_timeout, payment_deadline_minutes')
       .eq('id', eventId)
       .single()
 
@@ -37,6 +38,7 @@ const fetchSettings = async () => {
       autoReleaseTimeout.value = data.auto_release_claims_timeout ?? 15
       autoCloseEnabled.value = !!data.auto_close_ticket_enabled
       autoCloseTimeout.value = data.auto_close_ticket_timeout ?? 1440
+      paymentDeadlineMinutes.value = data.payment_deadline_minutes ?? 30
     }
   } catch { /* ignore */ } finally {
     loading.value = false
@@ -45,6 +47,21 @@ const fetchSettings = async () => {
 
 const saveSettings = async () => {
   saving.value = true
+
+  // Snapshot current state for rollback
+  const prev = {
+    claimMsgEnabled: claimMsgEnabled.value,
+    claimMsgTemplate: claimMsgTemplate.value,
+    autoReleaseEnabled: autoReleaseEnabled.value,
+    autoReleaseTimeout: autoReleaseTimeout.value,
+    autoCloseEnabled: autoCloseEnabled.value,
+    autoCloseTimeout: autoCloseTimeout.value,
+    paymentDeadlineMinutes: paymentDeadlineMinutes.value
+  }
+
+  // Optimistic: show success immediately
+  showToast('Pengaturan berhasil disimpan', 'success')
+
   try {
     const token = (await supabase.auth.getSession()).data.session?.access_token
     const res = await fetch(`/api/events/${eventId}`, {
@@ -56,16 +73,31 @@ const saveSettings = async () => {
         auto_release_claims_enabled: autoReleaseEnabled.value,
         auto_release_claims_timeout: autoReleaseTimeout.value,
         auto_close_ticket_enabled: autoCloseEnabled.value,
-        auto_close_ticket_timeout: autoCloseTimeout.value
+        auto_close_ticket_timeout: autoCloseTimeout.value,
+        payment_deadline_minutes: paymentDeadlineMinutes.value
       })
     })
-    if (res.ok) {
-      showToast('Pengaturan berhasil disimpan', 'success')
-    } else {
+    if (!res.ok) {
+      // Revert on error
+      claimMsgEnabled.value = prev.claimMsgEnabled
+      claimMsgTemplate.value = prev.claimMsgTemplate
+      autoReleaseEnabled.value = prev.autoReleaseEnabled
+      autoReleaseTimeout.value = prev.autoReleaseTimeout
+      autoCloseEnabled.value = prev.autoCloseEnabled
+      autoCloseTimeout.value = prev.autoCloseTimeout
+      paymentDeadlineMinutes.value = prev.paymentDeadlineMinutes
       const data = await res.json().catch(() => ({}))
       showToast(data.error || 'Gagal menyimpan pengaturan', 'error')
     }
   } catch {
+    // Revert on error
+    claimMsgEnabled.value = prev.claimMsgEnabled
+    claimMsgTemplate.value = prev.claimMsgTemplate
+    autoReleaseEnabled.value = prev.autoReleaseEnabled
+    autoReleaseTimeout.value = prev.autoReleaseTimeout
+    autoCloseEnabled.value = prev.autoCloseEnabled
+    autoCloseTimeout.value = prev.autoCloseTimeout
+    paymentDeadlineMinutes.value = prev.paymentDeadlineMinutes
     showToast('Gagal menyimpan pengaturan', 'error')
   } finally {
     saving.value = false
@@ -187,6 +219,44 @@ onMounted(fetchSettings)
           <p class="text-xs text-text-muted italic">
             Auto-release dinonaktifkan. Admin harus melepaskan klaim secara manual.
           </p>
+        </div>
+      </div>
+
+      <!-- Batas Waktu Pembayaran -->
+      <div class="bg-surface-card rounded-2xl border border-border/50 p-5 mb-6">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-sm font-semibold text-text-heading mb-0.5">Batas Waktu Pembayaran</h2>
+            <p class="text-xs text-text-muted leading-relaxed">
+              Waktu yang diberikan kepada pembeli untuk melakukan pembayaran setelah memesan tiket.
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <label class="text-xs font-medium text-text-muted">Durasi (menit)</label>
+          <div class="flex items-center gap-3">
+            <input
+              v-model.number="paymentDeadlineMinutes"
+              type="range"
+              min="10"
+              max="180"
+              step="5"
+              class="flex-1 accent-primary"
+            />
+            <span class="text-sm font-bold text-text-heading w-16 text-right">{{ paymentDeadlineMinutes }} menit</span>
+          </div>
+          <div class="flex justify-between text-[10px] text-text-muted">
+            <span>10 menit</span>
+            <span>60 menit</span>
+            <span>180 menit</span>
+          </div>
+          <div class="p-3 rounded-xl bg-blue-500/8 border border-blue-500/20">
+            <p class="text-xs text-blue-700 dark:text-blue-400">
+              <span class="material-symbols-outlined text-sm align-middle mr-1">info</span>
+              Tiket yang tidak dibayar akan otomatis dibatalkan setelah {{ paymentDeadlineMinutes }} menit.
+            </p>
+          </div>
         </div>
       </div>
 

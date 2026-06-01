@@ -109,11 +109,18 @@ const fillStyle = (active: boolean) => active ? { fontVariationSettings: "'FILL'
           :class="sidebarHovered ? 'opacity-100' : 'opacity-0'"
         >Masuk</span>
       </button>
-      <div class="text-[10px] text-text-muted text-center py-3 overflow-hidden">
+      <div class="text-[10px] text-text-muted text-center py-1 overflow-hidden">
         <span
           class="block transition-all duration-150 truncate"
           :class="sidebarHovered ? 'opacity-100' : 'opacity-0'"
         >&copy; 2026 Creaticks</span>
+      </div>
+      <div class="text-[10px] text-text-muted text-center pb-3 overflow-hidden">
+        <router-link
+          to="/syarat-dan-ketentuan"
+          class="block hover:text-primary transition-colors truncate"
+          :class="sidebarHovered ? 'opacity-100' : 'opacity-0'"
+        >Syarat &amp; Ketentuan</router-link>
       </div>
     </div>
 
@@ -123,6 +130,13 @@ const fillStyle = (active: boolean) => active ? { fontVariationSettings: "'FILL'
           class="block transition-all duration-150 truncate"
           :class="sidebarHovered ? 'opacity-100' : 'opacity-0'"
         >&copy; 2026 Creaticks</span>
+      </div>
+      <div class="text-[10px] text-center pt-1 overflow-hidden">
+        <router-link
+          to="/syarat-dan-ketentuan"
+          class="block text-text-muted hover:text-primary transition-colors truncate"
+          :class="sidebarHovered ? 'opacity-100' : 'opacity-0'"
+        >Syarat &amp; Ketentuan</router-link>
       </div>
     </div>
   </aside>

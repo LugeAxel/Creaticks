@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 const route = useRoute()
 const eventId = route.params.eventId as string
-const { event, resolvedRole } = useEventContext()
+const { event } = useEventContext()
 
 const design = reactive({
   layout: 'classic' as 'classic' | 'split' | 'minimal',
@@ -21,8 +21,8 @@ const design = reactive({
 const pendingFile = ref<File | null>(null)
 const localPreviewUrl = ref<string | null>(null)
 const saving = ref(false)
-const initLoading = ref(true)
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
+const initLoading = ref(true)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
 const fontMap: Record<string, string> = {
@@ -114,8 +114,8 @@ onMounted(async () => {
         design.tier = ticketTiers.value[0].name
       }
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn('Failed to load ticket designs:', e)
   } finally {
     initLoading.value = false
   }

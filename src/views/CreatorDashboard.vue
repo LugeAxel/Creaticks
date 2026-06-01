@@ -71,8 +71,8 @@ onMounted(async () => {
     if (res.ok) {
       stats.value = await res.json()
     }
-  } catch {
-    // silent
+  } catch (e) {
+    console.warn('Failed to fetch creator stats:', e)
   } finally {
     loading.value = false
   }

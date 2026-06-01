@@ -1,8 +1,16 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
+import { verifyCaptcha } from '../middleware/captcha.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
 import { logAdminAction } from '../lib/audit.js'
+
+const MAX_TITLE_LENGTH = 200
+const MAX_DESC_LENGTH = 5000
+const MAX_LOCATION_LENGTH = 200
+const MAX_LOCATION_DETAIL_LENGTH = 500
+const MAX_TIER_NAME_LENGTH = 100
+const MAX_TIER_DESC_LENGTH = 500
 
 const router = Router()
 
@@ -52,11 +60,26 @@ router.get('/creator-stats', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Gagal mengambil data statistik' })
   }
 
+  // Get accurate sold counts per event from actual ticket_requests rows
+  const { data: soldCounts } = await supabaseAdmin
+    .from('ticket_requests')
+    .select('event_id, tier_name')
+    .in('status', ['confirmed', 'completed', 'owned'])
+    .in('event_id', (events || []).map(e => e.id))
+
+  const soldCountMap = {}
+  if (soldCounts) {
+    for (const tr of soldCounts) {
+      const key = tr.event_id
+      soldCountMap[key] = (soldCountMap[key] || 0) + 1
+    }
+  }
+
   let totalSold = 0
   let totalRevenue = 0
   const activeEvents = (events || []).filter(e => e.status === 'published' || e.status === 'draft').map(e => {
     const tiers = e.ticket_tiers || []
-    const sold = tiers.reduce((s, t) => s + (t.sold_count || 0), 0)
+    const sold = soldCountMap[e.id] || 0
     const rev = tiers.reduce((s, t) => s + (t.sold_count || 0) * (t.price || 0), 0)
     totalSold += sold
     totalRevenue += rev
@@ -255,11 +278,17 @@ router.get('/:id', requireAuth, async (req, res) => {
   return res.json({ event, isTicketHolder: false })
 })
 
-router.post('/', requireAuth, async (req, res) => {
-  const { title, description, banner_url, date, location, location_lat, location_lng, location_detail, category, event_format, visibility, status, gallery_urls, ticket_tiers, invited_admins, seat_map } = req.body
+router.post('/', requireAuth, verifyCaptcha, async (req, res) => {
+  const { title, description, banner_url, date, location, location_lat, location_lng, location_detail, category, event_format, visibility, status, gallery_urls, ticket_tiers, invited_admins, seat_map, event_start_time, event_end_time, timezone } = req.body
 
   if (!title || !title.trim()) {
     return res.status(400).json({ error: 'Nama acara wajib diisi' })
+  }
+  if (title.trim().length > MAX_TITLE_LENGTH) {
+    return res.status(400).json({ error: `Nama acara maksimal ${MAX_TITLE_LENGTH} karakter` })
+  }
+  if (description && description.length > MAX_DESC_LENGTH) {
+    return res.status(400).json({ error: `Deskripsi maksimal ${MAX_DESC_LENGTH} karakter` })
   }
 
   if (!date) {
@@ -268,6 +297,44 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (category && !VALID_CATEGORIES.includes(category)) {
     return res.status(400).json({ error: `Kategori tidak valid. Pilih: ${VALID_CATEGORIES.join(', ')}` })
+  }
+
+  if (location && location.length > MAX_LOCATION_LENGTH) {
+    return res.status(400).json({ error: `Lokasi maksimal ${MAX_LOCATION_LENGTH} karakter` })
+  }
+  if (location_detail && location_detail.length > MAX_LOCATION_DETAIL_LENGTH) {
+    return res.status(400).json({ error: `Detail lokasi maksimal ${MAX_LOCATION_DETAIL_LENGTH} karakter` })
+  }
+
+  if (ticket_tiers && Array.isArray(ticket_tiers)) {
+    for (const tier of ticket_tiers) {
+      if (tier.name && tier.name.length > MAX_TIER_NAME_LENGTH) {
+        return res.status(400).json({ error: `Nama tiket tier maksimal ${MAX_TIER_NAME_LENGTH} karakter` })
+      }
+      if (tier.description && tier.description.length > MAX_TIER_DESC_LENGTH) {
+        return res.status(400).json({ error: `Deskripsi tiket tier maksimal ${MAX_TIER_DESC_LENGTH} karakter` })
+      }
+    }
+  }
+
+  const isPublishing = status === 'published'
+
+  if (isPublishing) {
+    if (!banner_url) {
+      return res.status(400).json({ error: 'Cover acara wajib diisi sebelum mempublikasikan' })
+    }
+    if (!ticket_tiers || !Array.isArray(ticket_tiers) || ticket_tiers.length === 0) {
+      return res.status(400).json({ error: 'Tambahkan minimal satu tipe tiket sebelum mempublikasikan acara' })
+    }
+    const eventStart = new Date(date)
+    const minPublishTime = new Date(Date.now() + 60 * 60 * 1000)
+    if (eventStart < minPublishTime) {
+      return res.status(400).json({ error: 'Waktu mulai acara sudah lewat. Ubah tanggal atau waktu acara' })
+    }
+  }
+
+  if (event_start_time && event_end_time && event_start_time === event_end_time) {
+    return res.status(400).json({ error: 'Waktu mulai dan selesai tidak boleh sama' })
   }
 
   const { data: event, error } = await supabaseAdmin
@@ -287,7 +354,10 @@ router.post('/', requireAuth, async (req, res) => {
       visibility: visibility || 'public',
       status: status || 'draft',
       gallery_urls: gallery_urls || [],
-      seat_map: seat_map || null
+      seat_map: seat_map || null,
+      event_start_time: event_start_time || null,
+      event_end_time: event_end_time || null,
+      timezone: timezone || 'Asia/Jakarta'
     })
     .select()
     .single()
@@ -305,7 +375,7 @@ router.post('/', requireAuth, async (req, res) => {
       event_id: event.id,
       name: t.name || 'Regular',
       price: t.price || 0,
-      quota: t.limit || t.quota || 0,
+      quota: Math.max(1, t.limit || t.quota || 1),
       description: t.description || '',
       color: t.color || '#6C63FF',
       seat_tier: t.seat_tier || false
@@ -363,7 +433,7 @@ router.post('/', requireAuth, async (req, res) => {
 
 router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params
-  const { title, description, banner_url, date, location, location_lat, location_lng, location_detail, category, event_format, visibility, status, gallery_urls, ticket_tiers } = req.body
+  const { title, description, banner_url, date, location, location_lat, location_lng, location_detail, category, event_format, visibility, status, gallery_urls, ticket_tiers, event_start_time, event_end_time, timezone } = req.body
 
   const { data: existing, error: fetchError } = await supabaseAdmin
     .from('events')
@@ -400,6 +470,10 @@ router.put('/:id', requireAuth, async (req, res) => {
   if (req.body.auto_release_claims_timeout !== undefined) updates.auto_release_claims_timeout = Number(req.body.auto_release_claims_timeout)
   if (req.body.auto_close_ticket_enabled !== undefined) updates.auto_close_ticket_enabled = req.body.auto_close_ticket_enabled
   if (req.body.auto_close_ticket_timeout !== undefined) updates.auto_close_ticket_timeout = Number(req.body.auto_close_ticket_timeout)
+  if (req.body.payment_deadline_minutes !== undefined) updates.payment_deadline_minutes = Number(req.body.payment_deadline_minutes)
+  if (event_start_time !== undefined) updates.event_start_time = event_start_time
+  if (event_end_time !== undefined) updates.event_end_time = event_end_time
+  if (timezone !== undefined) updates.timezone = timezone
   updates.updated_at = new Date().toISOString()
 
   const { data: event, error } = await supabaseAdmin
@@ -445,7 +519,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         event_id: id,
         name: t.name || 'Regular',
         price: t.price || 0,
-        quota: t.limit || t.quota || 0,
+        quota: Math.max(1, t.limit || t.quota || 1),
         description: t.description || '',
         color: t.color || '#6C63FF',
         seat_tier: t.seat_tier || false

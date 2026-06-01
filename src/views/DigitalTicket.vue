@@ -168,8 +168,8 @@ const copyId = async () => {
     await navigator.clipboard.writeText(ticket.value.id)
     copiedId.value = true
     setTimeout(() => { copiedId.value = false }, 2000)
-  } catch {
-    // clipboard unavailable
+  } catch (e) {
+    console.warn('Clipboard unavailable:', e)
   }
 }
 
@@ -302,11 +302,11 @@ const renderQR = async (data: string, size: number = 200) => {
     try {
       logoDataUrl = await getImageAsDataUrl('/creatick_logo.png')
       logoDataUrl = await roundImage(logoDataUrl, 16)
-    } catch {
-      // proceed without logo
+    } catch (e) {
+      console.warn('Failed to load logo for QR:', e)
     }
 
-    qrContainer.value.innerHTML = ''
+    qrContainer.value.replaceChildren()
 
     const qrCode = new QRCodeStyling({
       width: size,
@@ -365,8 +365,8 @@ onMounted(async () => {
           design.value = designData.design
         }
       }
-    } catch {
-      // proceed without custom design
+    } catch (e) {
+      console.warn('Failed to load custom ticket design:', e)
     }
 
   } catch {

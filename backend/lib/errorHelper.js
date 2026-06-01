@@ -7,7 +7,9 @@ export function clientError(res, status = 400, message = 'Bad request', code = n
 export function internalError(logger, label, req, res, err, clientMsg = 'Internal server error') {
   try {
     logger.error(label, clientMsg, { requestId: req?.requestId, error: err?.message || String(err) })
-  } catch (_) {}
+  } catch (_) {
+    console.error('Logger failed in internalError:', _)
+  }
   return res.status(500).json({ error: clientMsg })
 }
 

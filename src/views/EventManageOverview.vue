@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const router = useRouter()
-const { event, resolvedRole } = useEventContext()
+const { event } = useEventContext()
 
 const stats = ref({ total: 0, pending: 0, checkedIn: 0, revenue: 0 })
 const loading = ref(true)
@@ -33,8 +33,8 @@ onMounted(async () => {
         revenue: tickets.filter((t: any) => t.status === 'confirmed').length * 50000
       }
     }
-  } catch {
-    // silent
+  } catch (e) {
+    console.warn('Failed to fetch overview stats:', e)
   } finally {
     loading.value = false
   }

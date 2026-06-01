@@ -7,6 +7,7 @@ import { useToast } from '@/composables/useToast'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import BaseInput from '@/components/shared/BaseInput.vue'
 import HCaptcha from '@/components/shared/HCaptcha.vue'
+import BackButtonLanding from '@/components/shared/BackButtonLanding.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -110,7 +111,9 @@ const handleForgotPassword = async () => {
 
 <template>
   <div class="min-h-screen bg-surface flex items-center justify-center px-6">
+    
     <div class="w-full max-w-sm">
+      <BackButtonLanding class="mb-4" />
       <div class="text-center mb-8">
         <h1 class="text-2xl font-heading font-bold text-text-heading mb-2">Masuk</h1>
         <p class="text-sm text-text-muted">Masuk ke akun Creaticks kamu</p>

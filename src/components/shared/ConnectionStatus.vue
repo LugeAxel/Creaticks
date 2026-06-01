@@ -3,32 +3,33 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { getSocket, onEvent, offEvent } from '@/lib/socket'
 
 const status = ref<'connected'|'connecting'|'disconnected'>('disconnected')
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 function pollSocket() {
   const s = getSocket()
   if (s) {
     status.value = s.connected ? 'connected' : 'connecting'
   } else {
-    setTimeout(pollSocket, 500)
+    pollTimer = setTimeout(pollSocket, 500)
   }
 }
 
+const onConnect = () => { status.value = 'connected' }
+const onDisconnect = () => { status.value = 'disconnected' }
+const onReconnectAttempt = () => { status.value = 'connecting' }
+
 onMounted(() => {
   pollSocket()
-
-  const onConnect = () => { status.value = 'connected' }
-  const onDisconnect = () => { status.value = 'disconnected' }
-  const onReconnectAttempt = () => { status.value = 'connecting' }
-
   onEvent('connect', onConnect)
   onEvent('disconnect', onDisconnect)
   onEvent('reconnect_attempt', onReconnectAttempt)
 })
 
 onUnmounted(() => {
-  offEvent('connect')
-  offEvent('disconnect')
-  offEvent('reconnect_attempt')
+  if (pollTimer) clearTimeout(pollTimer)
+  offEvent('connect', onConnect)
+  offEvent('disconnect', onDisconnect)
+  offEvent('reconnect_attempt', onReconnectAttempt)
 })
 </script>
 

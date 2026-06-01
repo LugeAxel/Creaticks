@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { fetchWithRetry } from '@/lib/api'
 import { ref, computed, watch, onMounted, nextTick, onUnmounted } from 'vue'
+import { useToast } from '@/composables/useToast'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
+import { useDarkMode } from '@/composables/useDarkMode'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BackButton from '@/components/shared/BackButton.vue'
 import BaseButton from '@/components/shared/BaseButton.vue'
 import SeatSelector from '@/components/seats/SeatSelector.vue'
 import type { SeatData, TierInfo } from '@/components/seats/SeatMap.vue'
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
+import HCaptcha from '@/components/shared/HCaptcha.vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -17,6 +20,15 @@ const route = useRoute()
 const router = useRouter()
 
 const { user } = useAuth()
+const { isDark } = useDarkMode()
+
+const tileUrl = computed(() =>
+  isDark.value
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+)
+
+const tileAttribution = '&copy; OpenStreetMap contributors &copy; CARTO'
 
 const loading = ref(true)
 const event = ref<any>(null)
@@ -56,6 +68,7 @@ const hasSeatTierSelected = computed(() => {
 
 const canPurchase = computed(() => {
   if (!hasSelectedTier.value) return false
+  if (isAllSoldOut.value) return false
   if (hasSeatTierSelected.value) {
     for (const tier of (event.value?.ticket_tiers || [])) {
       if (!tier.seat_tier || !(quantities.value[tier.id] || 0)) continue
@@ -144,15 +157,28 @@ const initMap = async (lat: number, lng: number) => {
   mapInstance = L.map(mapContainer.value, {
     center: [lat, lng],
     zoom: 15,
-    zoomControl: false
+    zoomControl: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    touchZoom: true,
+    dragging: true,
+    attributionControl: false
   })
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer(tileUrl.value, {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap'
+    attribution: tileAttribution
   }).addTo(mapInstance)
 
   L.marker([lat, lng]).addTo(mapInstance)
+
+  // Enable scroll-to-zoom only on hover
+  mapContainer.value.addEventListener('mouseenter', () => {
+    mapInstance?.scrollWheelZoom.enable()
+  })
+  mapContainer.value.addEventListener('mouseleave', () => {
+    mapInstance?.scrollWheelZoom.disable()
+  })
 
   setTimeout(() => mapInstance?.invalidateSize(), 200)
 }
@@ -168,6 +194,19 @@ async function copyCoordinates() {
     // clipboard not available
   }
 }
+
+const updateDetailTileLayer = () => {
+  if (!mapInstance) return
+  mapInstance.eachLayer(layer => {
+    if ((layer as any).setUrl && !(layer as any)._url?.includes('stamen')) {
+      ;(layer as any).setUrl(tileUrl.value)
+    }
+  })
+}
+
+watch(isDark, () => {
+  updateDetailTileLayer()
+})
 
 const geocodeLocation = async (location: string) => {
   mapLoading.value = true
@@ -196,7 +235,40 @@ onUnmounted(() => {
   mapInstance?.remove()
 })
 
+const timeRangeLabel = computed(() => {
+  const ev = event.value
+  if (!ev) return ''
+  if (ev.event_start_time && ev.event_end_time) {
+    const st = ev.event_start_time.slice(0, 5)
+    const et = ev.event_end_time.slice(0, 5)
+    const tzMap: Record<string, string> = { 'Asia/Jakarta': 'WIB', 'Asia/Makassar': 'WITA', 'Asia/Jayapura': 'WIT' }
+    const tz = tzMap[ev.timezone] || 'WIB'
+    const startMin = parseInt(st.split(':')[0]) * 60 + parseInt(st.split(':')[1])
+    const endMin = parseInt(et.split(':')[0]) * 60 + parseInt(et.split(':')[1])
+    let durMin = endMin > startMin ? endMin - startMin : (24 * 60 - startMin) + endMin
+    const hours = Math.floor(durMin / 60)
+    const mins = durMin % 60
+    const durLabel = mins > 0 ? `${hours} jam ${mins} menit` : `${hours} jam`
+    return `${st} – ${et} ${tz} (${durLabel})`
+  }
+  return formatTime(ev.date) + ' WIB'
+})
+
+const isTierSoldOut = (tier: any) => {
+  return (tier.sold_count || 0) >= (tier.quota || 0)
+}
+
+const isAllSoldOut = computed(() => {
+  const tiers = event.value?.ticket_tiers || []
+  return tiers.length > 0 && tiers.every((t: any) => isTierSoldOut(t))
+})
+
 const increment = (tierId: string) => {
+  const tier = event.value?.ticket_tiers?.find((t: any) => t.id === tierId)
+  if (!tier) return
+  const currentQty = quantities.value[tierId] || 0
+  const remaining = (tier.quota || 0) - (tier.sold_count || 0) - currentQty
+  if (remaining <= 0) return
   if (!quantities.value[tierId]) quantities.value[tierId] = 0
   quantities.value[tierId]++
   calculateTotal()
@@ -219,6 +291,20 @@ const calculateTotal = () => {
 
 const requestLoading = ref(false)
 const requestError = ref('')
+const captchaToken = ref('')
+const captchaRef = ref<InstanceType<typeof HCaptcha>>()
+
+const onCaptchaVerified = (token: string) => {
+  captchaToken.value = token
+}
+
+const onCaptchaExpired = () => {
+  captchaToken.value = ''
+}
+
+const hCaptchaSiteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY
+
+const { showToast } = useToast()
 
 const handleRequestTicket = async () => {
   if (!event.value?.ticket_tiers) return
@@ -260,6 +346,8 @@ const handleRequestTicket = async () => {
   requestLoading.value = true
   requestError.value = ''
 
+  const idempotencyKey = crypto.randomUUID?.() ?? Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
+
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) {
@@ -267,7 +355,13 @@ const handleRequestTicket = async () => {
       return
     }
 
-    const body: any = { event_id: event.value.id, items }
+    const body: any = { event_id: event.value.id, items, captchaToken: captchaToken.value }
+
+    if (!captchaToken.value) {
+      requestError.value = 'Harap selesaikan verifikasi keamanan'
+      requestLoading.value = false
+      return
+    }
 
     if (hasSeatTierSelected.value) {
       for (const tier of event.value.ticket_tiers) {
@@ -290,7 +384,8 @@ const handleRequestTicket = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`
+        Authorization: `Bearer ${session.access_token}`,
+        'Idempotency-Key': idempotencyKey
       },
       body: JSON.stringify(body)
     })
@@ -304,13 +399,20 @@ const handleRequestTicket = async () => {
       } else {
         requestError.value = data.error || 'Gagal memesan tiket'
       }
+      showToast(requestError.value, 'error')
       return
     }
 
+    captchaToken.value = ''
+    captchaRef.value?.reset()
+    showToast('Permintaan tiket berhasil', 'success')
     router.push('/tickets')
   } catch {
+    captchaToken.value = ''
+    captchaRef.value?.reset()
     await releaseSeatLocks()
     requestError.value = 'Terjadi kesalahan, silakan coba lagi'
+    showToast(requestError.value, 'error')
   } finally {
     requestLoading.value = false
   }
@@ -441,7 +543,7 @@ function getTierName(tierId: string | null) {
       <BaseButton variant="primary" @click="router.push('/')">Kembali ke Beranda</BaseButton>
     </div>
 
-    <div v-else class="pb-24 md:pb-8">
+    <div v-else class="pb-24 md:pb-8 mb-24">
       <div class="relative">
         <div class="h-56 md:h-80 bg-surface-variant overflow-hidden rounded-t-2xl">
           <img
@@ -485,13 +587,22 @@ function getTierName(tierId: string | null) {
               </div>
             </div>
           </div>
+          <div v-if="isAdmin" class="mb-4 rounded-2xl border border-teal-500/30 bg-teal-50/80 p-4 text-teal-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-teal-500">admin_panel_settings</span>
+              <p class="text-sm font-semibold">Kamu adalah Admin</p>
+            </div>
+            <BaseButton variant="primary" size="sm" @click="router.push(`/events/${eventId}/manage/overview`)">
+              Kelola Acara
+            </BaseButton>
+          </div>
 
           <div class="space-y-3 mb-6">
             <div class="flex items-start gap-3 text-sm">
               <span class="material-symbols-outlined text-lg text-primary mt-0.5">calendar_month</span>
               <div>
                 <p class="text-text-heading font-semibold">{{ formatDate(event.date) }}</p>
-                <p class="text-text-muted">{{ formatTime(event.date) }} WIB</p>
+                <p class="text-text-muted">{{ timeRangeLabel }}</p>
               </div>
             </div>
             <div v-if="event.location" class="flex items-start gap-3 text-sm">
@@ -535,6 +646,11 @@ function getTierName(tierId: string | null) {
 
         <div class="mt-6">
           <h2 class="text-lg font-heading font-bold text-text-heading mb-4">Pilih Tiket</h2>
+          <div v-if="isAllSoldOut" class="mb-4 p-4 rounded-2xl bg-error/10 border border-error/20 text-center">
+            <span class="material-symbols-outlined text-3xl text-error mb-1">block</span>
+            <p class="text-sm font-semibold text-error">Tiket Habis</p>
+            <p class="text-xs text-text-muted mt-0.5">Semua tiket untuk acara ini sudah terjual</p>
+          </div>
           <div class="space-y-4">
             <div v-for="tier in (event.ticket_tiers || [])" :key="tier.id" class="bg-surface-card rounded-2xl border border-border/50 p-5 relative overflow-hidden">
               <div class="flex items-start justify-between mb-3">
@@ -554,20 +670,22 @@ function getTierName(tierId: string | null) {
               </div>
               <div class="flex items-center justify-between pt-3 border-t border-dashed border-border/50">
                 <p class="text-xs text-text-muted">
-                  <span v-if="tier.quota > 0">{{ tier.quota - (quantities[tier.id] || 0) }} slot tersisa</span>
-                  <span v-else>Kuota tidak terbatas</span>
+                  <span v-if="isTierSoldOut(tier)" class="text-error font-semibold">Habis</span>
+                  <span>{{ tier.quota - tier.sold_count - (quantities[tier.id] || 0) }} slot tersisa</span>
                 </p>
                 <div class="flex items-center gap-3">
                   <button
                     class="w-9 h-9 rounded-full border-2 border-border flex items-center justify-center text-text-heading hover:border-primary hover:text-primary transition-all cursor-pointer"
                     @click="decrement(tier.id)"
+                    :class="{ 'opacity-30 pointer-events-none': isTierSoldOut(tier) }"
                   >
                     <span class="material-symbols-outlined text-lg">remove</span>
                   </button>
-                  <span class="w-8 text-center font-bold text-text-heading">{{ quantities[tier.id] || 0 }}</span>
+                  <span class="w-8 text-center font-bold text-text-heading">{{ isTierSoldOut(tier) ? '—' : (quantities[tier.id] || 0) }}</span>
                   <button
                     class="w-9 h-9 rounded-full border-2 border-border flex items-center justify-center text-text-heading hover:border-primary hover:text-primary transition-all cursor-pointer"
                     @click="increment(tier.id)"
+                    :class="{ 'opacity-30 pointer-events-none': isTierSoldOut(tier) }"
                   >
                     <span class="material-symbols-outlined text-lg">add</span>
                   </button>
@@ -627,9 +745,13 @@ function getTierName(tierId: string | null) {
       <div v-if="totalPrice > 0 && !isCreator" class="fixed bottom-16 md:bottom-0 left-0 right-0 md:static md:mt-6 bg-surface-card border-t border-border/50 md:border md:rounded-2xl md:border-border/50 p-4 md:p-6 max-w-screen-md md:mx-auto z-40">
         <p v-if="requestError" class="text-sm text-error mb-3 text-center">{{ requestError }}</p>
         <div class="max-w-screen-md mx-auto flex items-center justify-between">
-          <div>
+          <div class="min-w-[80px] mb-2">
             <p class="text-xs text-text-muted">Total</p>
-            <p class="text-xl font-heading font-bold text-text-heading">Rp {{ totalPrice.toLocaleString('id-ID') }}</p>
+            <div class="flex items-center gap-1">
+              <p class="text-xl font-heading font-bold text-text-heading">Rp</p>
+              <p class="text-2xl font-heading font-bold text-text-heading">{{ totalPrice.toLocaleString('id-ID') }}</p>
+            </div>
+            
             <p v-if="seatMapEnabled && hasSeatTierSelected" class="text-xs text-primary mt-1">
               {{ allSelectedSeatIds.length }} kursi dipilih
             </p>
@@ -640,8 +762,20 @@ function getTierName(tierId: string | null) {
                 {{ tier.name }}: pilih {{ getSeatsNeededForTier(tier.id) - getSeatsSelectedForTier(tier.id) }} kursi lagi
               </p>
             </template>
-            <BaseButton variant="primary" size="lg" :disabled="!canPurchase" :loading="requestLoading" @click="handleRequestTicket">
-              {{ requestLoading ? 'Memproses...' : 'Minta Tiket' }}
+            <div class="max-w-[300px]">
+              <HCaptcha
+                class="transform scale-[0.65] origin-right -translate-x-1 -translate-y-1 max-w-[150px]:"
+                ref="captchaRef"
+                v-if="!captchaToken"
+                :sitekey="hCaptchaSiteKey"
+                size="compact"
+                @verify="onCaptchaVerified"
+                @expired="onCaptchaExpired"
+              />
+            </div>
+            
+            <BaseButton variant="primary" size="lg" :disabled="!canPurchase || !captchaToken || isAllSoldOut" :loading="requestLoading" @click="handleRequestTicket">
+              {{ requestLoading ? 'Memproses...' : isAllSoldOut ? 'Tiket Habis' : 'Minta Tiket' }}
             </BaseButton>
           </div>
         </div>
@@ -656,17 +790,6 @@ function getTierName(tierId: string | null) {
         </div>
       </div>
 
-      <div v-else-if="isAdmin" class="fixed bottom-16 md:bottom-0 left-0 right-0 md:static md:mt-6 bg-surface-card border border-teal-500/30 md:rounded-2xl p-4 md:p-6 max-w-screen-md md:mx-auto z-40">
-        <div class="max-w-screen-md mx-auto flex items-center justify-between gap-4">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-teal-500 text-lg">admin_panel_settings</span>
-            <p class="text-sm font-semibold text-teal-600">Kamu adalah Admin</p>
-          </div>
-          <BaseButton variant="primary" size="sm" @click="router.push(`/events/${eventId}/manage/overview`)">
-            Kelola Acara
-          </BaseButton>
-        </div>
-      </div>
     </div>
   </div>
   </AppLayout>

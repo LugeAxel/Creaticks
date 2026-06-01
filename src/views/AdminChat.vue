@@ -39,10 +39,17 @@ const eventId = route.params.eventId as string
 const threads = ref<Thread[]>([])
 const activeThread = ref<Thread | null>(null)
 const messages = ref<Message[]>([])
+const hasMore = ref(false)
+const loadingMore = ref(false)
 const messageText = ref('')
 const sending = ref(false)
 const loading = ref(true)
 const chatChannel = ref<any>(null)
+
+const visibleCount = ref(5)
+const displayedThreads = computed(() => threads.value.slice(0, visibleCount.value))
+const hasMoreThreads = computed(() => threads.value.length > visibleCount.value)
+const loadMoreThreads = () => { visibleCount.value += 5 }
 
 const rejectModalOpen = ref(false)
 const rejectReason = ref('')
@@ -74,14 +81,18 @@ const statusBadge = (status: string) => {
 
 const openThread = async (thread: Thread) => {
   activeThread.value = thread
+  messages.value = []
+  hasMore.value = false
+  loadingMore.value = false
   const token = (await supabase.auth.getSession()).data.session?.access_token
 
-  const res = await fetch(`/api/chat/thread/${thread.id}`, {
+  const res = await fetch(`/api/chat/thread/${thread.id}?limit=50`, {
     headers: { Authorization: `Bearer ${token}` }
   })
   if (res.ok) {
     const data = await res.json()
     messages.value = data.messages || []
+    hasMore.value = !!data.has_more
   }
 
   await nextTick()
@@ -99,6 +110,7 @@ const sendMessage = async () => {
   sending.value = true
 
   const token = (await supabase.auth.getSession()).data.session?.access_token
+  const idempotencyKey = crypto.randomUUID?.() ?? Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
 
   const optimistic: Message = {
     id: 'temp_' + Date.now(),
@@ -117,7 +129,7 @@ const sendMessage = async () => {
 
   const res = await fetch(`/api/chat/thread/${activeThread.value.id}/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'Idempotency-Key': idempotencyKey },
     body: JSON.stringify({ content })
   })
 
@@ -227,6 +239,23 @@ const loadMessages = async () => {
   if (container) container.scrollTop = container.scrollHeight
 }
 
+const loadOlderMessages = async () => {
+  if (!activeThread.value || loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  const token = (await supabase.auth.getSession()).data.session?.access_token
+  const oldest = messages.value.length > 0 ? messages.value[0].created_at : undefined
+  const before = oldest ? `&before=${encodeURIComponent(oldest)}` : ''
+  const res = await fetch(`/api/chat/thread/${activeThread.value.id}?limit=50${before}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+  if (res.ok) {
+    const data = await res.json()
+    messages.value = [...(data.messages || []), ...messages.value]
+    hasMore.value = !!data.has_more
+  }
+  loadingMore.value = false
+}
+
 const isBuyer = (msg: Message) => {
   return msg.sender_id !== user.value?.id
 }
@@ -257,7 +286,7 @@ onUnmounted(() => {
 
 <template>
   <AppLayout>
-    <div class="min-h-screen bg-surface flex flex-col md:flex-row">
+    <div class="h-dvh bg-surface flex flex-col md:flex-row overflow-hidden">
       <div :class="['md:w-80 border-r border-border/50 bg-surface-card overflow-y-auto', activeThread ? 'hidden md:block' : '']">
         <div class="p-4 border-b border-border/50">
           <div class="flex items-center gap-3">
@@ -275,7 +304,7 @@ onUnmounted(() => {
 
         <div v-else class="divide-y divide-border/30">
           <button
-            v-for="thread in threads"
+            v-for="thread in displayedThreads"
             :key="thread.id"
             class="w-full text-left p-4 hover:bg-surface/50 transition-colors cursor-pointer"
             :class="activeThread?.id === thread.id ? 'bg-teal-500/5' : ''"
@@ -300,10 +329,18 @@ onUnmounted(() => {
               </div>
             </div>
           </button>
+          <div v-if="hasMoreThreads" class="p-3 text-center">
+            <button
+              class="px-4 py-1.5 text-xs font-semibold text-primary border border-primary/30 rounded-full hover:bg-primary/5 transition-colors cursor-pointer"
+              @click="loadMoreThreads"
+            >
+              Muat lebih banyak ({{ threads.length - visibleCount }})
+            </button>
+          </div>
         </div>
       </div>
 
-      <div :class="['flex-1 flex flex-col', !activeThread ? 'hidden md:flex' : '']">
+      <div :class="['flex-1 flex flex-col overflow-hidden', !activeThread ? 'hidden md:flex' : '']">
         <div v-if="!activeThread" class="flex-1 flex items-center justify-center">
           <div class="text-center">
             <span class="material-symbols-outlined text-5xl text-text-muted mb-4">chat</span>
@@ -312,7 +349,7 @@ onUnmounted(() => {
         </div>
 
         <template v-else>
-          <div class="p-4 border-b border-border/50 bg-surface-card">
+          <div class="shrink-0 p-4 border-b border-border/50 bg-surface-card">
             <div class="flex items-center gap-3">
               <button class="md:hidden cursor-pointer" @click="activeThread = null">
                 <span class="material-symbols-outlined">arrow_back</span>
@@ -338,6 +375,15 @@ onUnmounted(() => {
           </div>
 
           <div class="flex-1 overflow-y-auto p-4 space-y-3 messages-container">
+            <div v-if="hasMore" class="flex justify-center">
+              <button
+                class="px-4 py-1.5 text-xs font-semibold text-primary border border-primary/30 rounded-full hover:bg-primary/5 transition-colors cursor-pointer"
+                :disabled="loadingMore"
+                @click="loadOlderMessages"
+              >
+                {{ loadingMore ? 'Memuat...' : 'Muat pesan sebelumnya' }}
+              </button>
+            </div>
             <div
               v-for="msg in messages"
               :key="msg.id"
@@ -374,7 +420,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="activeThread.is_active" class="p-4 border-t border-border/50 bg-surface-card">
+          <div v-if="activeThread.is_active" class="shrink-0 p-4 border-t border-border/50 bg-surface-card">
             <form @submit.prevent="sendMessage" class="flex gap-2">
               <input
                 v-model="messageText"
@@ -391,7 +437,7 @@ onUnmounted(() => {
               </button>
             </form>
           </div>
-          <div v-else class="p-4 border-t border-border/50 bg-surface-card text-center">
+          <div v-else class="shrink-0 p-4 border-t border-border/50 bg-surface-card text-center">
             <p class="text-xs text-text-muted">Percakapan ini sudah ditutup</p>
           </div>
         </template>

@@ -7,6 +7,9 @@ export interface EventData {
   title: string
   date: string
   location: string
+  location_lat: number | null
+  location_lng: number | null
+  location_detail: string
   status: string
   banner_url: string
   description: string
@@ -101,7 +104,8 @@ export function useEventContextLoader(eventId: string | string[]) {
         adminRoles: roles,
         loading: false
       }
-    } catch {
+    } catch (e) {
+      console.warn('Failed to load event context:', e)
       router.replace('/events/saya')
     } finally {
       loading.value = false

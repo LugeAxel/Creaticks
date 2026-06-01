@@ -1,7 +1,6 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './useAuth'
-import type { AuthError } from '@supabase/supabase-js'
 
 export interface Invitation {
   id: string
@@ -121,14 +120,24 @@ export function useInvitations() {
     return { activity: data.activity as ActivityEntry[] }
   }
 
+  let authUnsub: (() => void) | null = null
+
   onMounted(() => {
     fetchInvitations()
 
-    supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event !== 'SIGNED_IN') return
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(() => fetchInvitations(), 2000)
     })
+    authUnsub = subscription.unsubscribe
+  })
+
+  onUnmounted(() => {
+    if (authUnsub) {
+      authUnsub()
+      authUnsub = null
+    }
   })
 
   return {

@@ -42,6 +42,33 @@ const activeCategory = ref('')
 const currentPage = ref(1)
 const totalEvents = ref(0)
 const pageSize = 8
+const browseStateKey = 'acaraBrowseState'
+const restoreScroll = ref<number | null>(null)
+
+const saveBrowseState = () => {
+  if (typeof window === 'undefined') return
+  sessionStorage.setItem(browseStateKey, JSON.stringify({
+    searchInput: searchInput.value,
+    activeCategory: activeCategory.value,
+    currentPage: currentPage.value,
+    scrollY: window.scrollY
+  }))
+}
+
+const loadBrowseState = () => {
+  if (typeof window === 'undefined') return
+  const saved = sessionStorage.getItem(browseStateKey)
+  if (!saved) return
+  try {
+    const state = JSON.parse(saved)
+    if (typeof state.searchInput === 'string') searchInput.value = state.searchInput
+    if (typeof state.activeCategory === 'string') activeCategory.value = state.activeCategory
+    if (typeof state.currentPage === 'number') currentPage.value = state.currentPage
+    if (typeof state.scrollY === 'number') restoreScroll.value = state.scrollY
+  } catch {
+    // ignore invalid stored state
+  }
+}
 
 const categoryOptions = ['Teknologi', 'Musik', 'Seni', 'Workshop', 'Olahraga', 'Bisnis', 'Lainnya']
 
@@ -68,9 +95,12 @@ watch(activeCategory, (v) => {
   }, 300)
 })
 
+watch([searchInput, activeCategory, currentPage], saveBrowseState)
+
 async function fetchEvents() {
   loading.value = true
   error.value = ''
+  saveBrowseState()
   try {
     const params = new URLSearchParams({
       page: String(currentPage.value),
@@ -94,6 +124,10 @@ async function fetchEvents() {
     error.value = 'Gagal memuat acara'
   } finally {
     loading.value = false
+    if (restoreScroll.value !== null) {
+      window.scrollTo({ top: restoreScroll.value, behavior: 'auto' })
+      restoreScroll.value = null
+    }
   }
 }
 
@@ -104,9 +138,14 @@ const reload = () => {
 }
 
 let eventsChannel: ReturnType<typeof supabase.channel> | null = null
+let scrollHandler: (() => void) | null = null
 
 onMounted(async () => {
+  loadBrowseState()
   await fetchEvents()
+
+  scrollHandler = () => saveBrowseState()
+  window.addEventListener('scroll', scrollHandler, { passive: true })
 
   eventsChannel = supabase
     .channel('acara_browse_realtime')
@@ -140,6 +179,9 @@ onMounted(async () => {
 onUnmounted(() => {
   if (eventsChannel) {
     supabase.removeChannel(eventsChannel)
+  }
+  if (scrollHandler) {
+    window.removeEventListener('scroll', scrollHandler)
   }
 })
 

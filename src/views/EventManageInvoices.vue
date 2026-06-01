@@ -119,7 +119,10 @@ const statusClass = (status: string) => {
 }
 
 const exportCSV = async () => {
-  const res = await fetchWithRetry(`/api/tickets/event/${eventId}/export/invoices?format=csv`)
+  const token = (await supabase.auth.getSession()).data.session?.access_token
+  const res = await fetchWithRetry(`/api/tickets/event/${eventId}/export/invoices?format=csv`, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
   if (!res.ok) return
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
@@ -137,8 +140,8 @@ const fetchInvoices = async () => {
       const data = await res.json()
       invoices.value = data.invoices || []
     }
-  } catch {
-    // fallback
+  } catch (e) {
+    console.warn('Failed to fetch invoices:', e)
   } finally {
     loading.value = false
   }
@@ -159,7 +162,9 @@ const subscribeToRealtime = () => {
         const updated = payload.new as Invoice
         const idx = invoices.value.findIndex(inv => inv.id === updated.id)
         if (payload.eventType === 'INSERT') {
-          invoices.value.unshift(updated)
+          if (updated.status === 'paid') {
+            invoices.value.unshift(updated)
+          }
         } else if (payload.eventType === 'UPDATE') {
           if (idx !== -1) {
             invoices.value[idx] = { ...invoices.value[idx], ...updated }

@@ -13,7 +13,7 @@ import HCaptcha from '@/components/shared/HCaptcha.vue'
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 
 const router = useRouter()
-const { session, getAuthHeaders, resetPasswordForEmail, linkOAuthProvider } = useAuth()
+const { user, session, getAuthHeaders, resetPasswordForEmail, linkOAuthProvider } = useAuth()
 const { upload } = useCloudinary()
 const { showToast } = useToast()
 
@@ -41,14 +41,13 @@ const onCaptchaExpired = () => {
   captchaToken.value = ''
 }
 
-onMounted(async () => {
+onMounted(() => {
   loading.value = true
-  const { data: { user } } = await supabase.auth.getUser()
-  if (user) {
-    name.value = user.user_metadata?.name || ''
-    phone.value = user.user_metadata?.phone || ''
-    avatarUrl.value = user.user_metadata?.avatar_url || ''
-    userRole.value = user.user_metadata?.role || ''
+  if (user.value) {
+    name.value = user.value.user_metadata?.name || ''
+    phone.value = user.value.user_metadata?.phone || ''
+    avatarUrl.value = user.value.user_metadata?.avatar_url || ''
+    userRole.value = user.value.user_metadata?.role || ''
   }
   loading.value = false
 })
@@ -81,6 +80,7 @@ const handleSave = async () => {
     return
   }
 
+  await supabase.auth.refreshSession()
   success.value = 'Profil berhasil diperbarui'
 }
 

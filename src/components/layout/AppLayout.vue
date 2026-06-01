@@ -16,19 +16,23 @@ defineProps<{
 const user = ref<User | null>(null)
 const { chatUnread, fetchUnread, initRealtime, cleanupRealtime } = useChatUnread()
 
+let authUnsub: (() => void) | null = null
+
 onMounted(async () => {
   const { data: { session } } = await supabase.auth.getSession()
   user.value = session?.user ?? null
 
-  supabase.auth.onAuthStateChange((_event, session) => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
     user.value = session?.user ?? null
   })
+  authUnsub = subscription.unsubscribe
 
   await fetchUnread()
   initRealtime()
 })
 
 onUnmounted(() => {
+  if (authUnsub) authUnsub()
   cleanupRealtime()
 })
 

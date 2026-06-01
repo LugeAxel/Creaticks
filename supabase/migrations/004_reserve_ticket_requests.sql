@@ -22,15 +22,13 @@ BEGIN
     RAISE EXCEPTION 'TIER_NOT_FOUND';
   END IF;
 
-  IF tier_row.quota > 0 THEN
-    SELECT count(*) INTO existing_count FROM ticket_requests tr
-      WHERE tr.event_id = _event_id
-      AND tr.tier_name = _tier_name
-      AND tr.status NOT IN ('cancelled','completed');
+  SELECT count(*) INTO existing_count FROM ticket_requests tr
+    WHERE tr.event_id = _event_id
+    AND tr.tier_name = _tier_name
+    AND tr.status NOT IN ('cancelled','completed');
 
-    IF (tier_row.quota - existing_count) < _quantity THEN
-      RAISE EXCEPTION 'NOT_ENOUGH_TICKETS';
-    END IF;
+  IF (tier_row.quota - existing_count) < _quantity THEN
+    RAISE EXCEPTION 'NOT_ENOUGH_TICKETS';
   END IF;
 
   FOR i IN 1.._quantity LOOP

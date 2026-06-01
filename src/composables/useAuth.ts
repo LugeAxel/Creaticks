@@ -8,29 +8,38 @@ const user = ref<User | null>(null)
 const session = ref<Session | null>(null)
 const loading = ref(true)
 let isSigningOut = false
+let listenerRegistered = false
+let authSubUnsub: (() => void) | null = null
 
 export function useAuth() {
   onMounted(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      session.value = s
-      user.value = s?.user ?? null
-      setSocketAuthToken(s?.access_token ?? null)
-      loading.value = false
-    })
+    if (listenerRegistered) return
+    listenerRegistered = true
 
-    supabase.auth.onAuthStateChange((event, s) => {
+    // Register listener first so we don't miss SIGNED_IN on OAuth redirect
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       const prevSession = session.value
       session.value = s
       user.value = s?.user ?? null
       setSocketAuthToken(s?.access_token ?? null)
+      loading.value = false
 
       if (event === 'SIGNED_OUT' && prevSession && !isSigningOut) {
+        sessionStorage.removeItem('termsAccepted')
         if (window.location.pathname !== '/login') {
           const { showToast } = useToast()
           showToast('Sesi berakhir, silakan login ulang', 'warning')
           setTimeout(() => { window.location.href = '/login?expired=1' }, 800)
         }
       }
+    })
+    authSubUnsub = subscription.unsubscribe
+
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      session.value = s ?? session.value
+      user.value = s?.user ?? user.value
+      if (s) setSocketAuthToken(s.access_token)
+      loading.value = false
     })
   })
 
@@ -80,6 +89,7 @@ export function useAuth() {
 
   const signOut = async () => {
     isSigningOut = true
+    sessionStorage.removeItem('termsAccepted')
     const { error } = await supabase.auth.signOut()
     isSigningOut = false
     return { error: error as AuthError | null }

@@ -12,6 +12,7 @@ import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 const { showToast } = useToast()
 const { user } = useAuth()
 const { event } = useEventContext()
+if (!event) throw new Error('Event context not available')
 const eventId = event.id
 
 const currentUserId = computed(() => user.value?.id)
@@ -47,7 +48,7 @@ interface TranscriptMessage {
 
 const tickets = ref<TicketRequest[]>([])
 const loading = ref(true)
-const activeFilter = ref<'all' | 'pending' | 'confirmed' | 'cancelled'>('all')
+const activeFilter = ref<'all' | 'pending' | 'confirmed'>('all')
 const pendingAction = ref<string | null>(null)
 const transcripts = ref<Record<string, TranscriptMessage[]>>({})
 const loadingTranscripts = ref<Record<string, boolean>>({})
@@ -186,7 +187,6 @@ const filters = [
   { key: 'all' as const,       label: 'Semua' },
   { key: 'pending' as const,   label: 'Pending' },
   { key: 'confirmed' as const, label: 'Confirmed' },
-  { key: 'cancelled' as const, label: 'Dibatalkan' }
 ]
 
 onMounted(() => {
@@ -199,12 +199,15 @@ onMounted(() => {
       if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], claimed_by: payload.claimed_by, claimed_by_profile: payload.claimed_by_profile }
     })
     onEvent('queue:released', (payload: any) => {
-      const idx = tickets.value.findIndex(t => t.id === payload.id)
-      if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], claimed_by: null, claimed_by_profile: null }
+      tickets.value = tickets.value.filter(t => t.id !== payload.id)
     })
     onEvent('queue:status_changed', (payload: any) => {
-      const idx = tickets.value.findIndex(t => t.id === payload.id)
-      if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], status: payload.status }
+      if (payload.status === 'cancelled') {
+        tickets.value = tickets.value.filter(t => t.id !== payload.id)
+      } else {
+        const idx = tickets.value.findIndex(t => t.id === payload.id)
+        if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], status: payload.status }
+      }
     })
   } catch { /* ignore */ }
 })
