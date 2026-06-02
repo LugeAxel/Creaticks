@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import BaseButton from '@/components/shared/BaseButton.vue'
@@ -9,13 +9,14 @@ import HCaptcha from '@/components/shared/HCaptcha.vue'
 import BackButton from '@/components/shared/BackButton.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { signUp } = useAuth()
 
 const name = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
-const role = ref<'creator' | 'buyer'>('buyer')
+const role = ref<'creator' | 'buyer'>((route.query.role as 'creator' | 'buyer') || 'buyer')
 const termsAgreed = ref(false)
 const loading = ref(false)
 const error = ref('')
@@ -88,7 +89,9 @@ const handleSignUp = async () => {
       <BackButton/>
       <div class="text-center mb-8">
         <h1 class="text-2xl font-heading font-bold text-text-heading mb-2">Daftar</h1>
-        <p class="text-sm text-text-muted">Buat akun Creaticks baru</p>
+        <p class="text-sm text-text-muted">
+          {{ role === 'creator' ? 'Mulai buat event komunitas' : 'Buat akun Creaticks baru' }}
+        </p>
       </div>
 
       <form class="flex flex-col gap-4" @submit.prevent="handleSignUp">
@@ -103,17 +106,19 @@ const handleSignUp = async () => {
             <button
               type="button"
               class="flex-1 px-4 py-3 text-sm font-semibold border-2 rounded-xl transition-all duration-200 cursor-pointer"
-              :class="role === 'buyer' ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted hover:border-primary/50'"
+              :class="role === 'buyer' ? 'border-primary bg-primary/10 text-primary shadow-sm' : 'border-border text-text-muted hover:border-primary/50 hover:text-text-heading'"
               @click="role = 'buyer'"
             >
+              <span class="material-symbols-outlined align-middle text-lg mr-1">person</span>
               Pembeli
             </button>
             <button
               type="button"
               class="flex-1 px-4 py-3 text-sm font-semibold border-2 rounded-xl transition-all duration-200 cursor-pointer"
-              :class="role === 'creator' ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted hover:border-primary/50'"
+              :class="role === 'creator' ? 'border-primary bg-primary/10 text-primary shadow-sm' : 'border-border text-text-muted hover:border-primary/50 hover:text-text-heading'"
               @click="role = 'creator'"
             >
+              <span class="material-symbols-outlined align-middle text-lg mr-1">rocket_launch</span>
               Kreator
             </button>
           </div>
@@ -143,7 +148,7 @@ const handleSignUp = async () => {
           />
         </div>
 
-        <p v-if="error" class="text-sm text-error text-center">{{ error }}</p>
+        <p v-if="error" class="rounded-xl bg-error/10 px-4 py-3 text-sm text-error text-center font-medium">{{ error }}</p>
 
         <BaseButton type="submit" variant="primary" :loading="loading" fullWidth>
           Daftar

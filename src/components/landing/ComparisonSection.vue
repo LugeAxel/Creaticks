@@ -15,34 +15,34 @@
       <table class="w-full">
         <thead>
           <tr class="border-b border-border">
-            <th class="py-4 px-4 text-left text-sm font-semibold text-text-heading">Fitur</th>
-            <th class="py-4 px-4 text-center text-sm font-semibold text-text-heading">WhatsApp</th>
-            <th class="py-4 px-4 text-center text-sm font-semibold text-text-heading">Google Forms</th>
-            <th class="py-4 px-4 text-center text-sm font-semibold text-text-heading">Spreadsheet</th>
-            <th class="py-4 px-4 text-center text-sm font-semibold text-primary">Creatick</th>
+            <th class="py-3 md:py-4 px-2 md:px-4 text-left text-xs md:text-sm font-semibold text-text-heading">Fitur</th>
+            <th class="py-3 md:py-4 px-2 md:px-4 text-center text-xs md:text-sm font-semibold text-text-heading">WA</th>
+            <th class="hidden sm:table-cell py-3 md:py-4 px-2 md:px-4 text-center text-xs md:text-sm font-semibold text-text-heading">Google Forms</th>
+            <th class="hidden sm:table-cell py-3 md:py-4 px-2 md:px-4 text-center text-xs md:text-sm font-semibold text-text-heading">Spreadsheet</th>
+            <th class="py-3 md:py-4 px-2 md:px-4 text-center text-xs md:text-sm font-semibold text-primary">Creatick</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="row in comparisonRows" :key="row.feature">
             <tr class="border-b border-border hover:bg-surface-card/50 transition">
-              <td class="py-4 px-4 text-sm font-medium text-text-heading">{{ row.feature }}</td>
-              <td class="py-4 px-4 text-center">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-full" :class="getStatusClass(row.whatsapp)">
+              <td class="py-3 md:py-4 px-2 md:px-4 text-xs md:text-sm font-medium text-text-heading">{{ row.feature }}</td>
+              <td class="py-3 md:py-4 px-2 md:px-4 text-center">
+                <span class="inline-flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full text-xs md:text-sm" :class="getStatusClass(row.whatsapp)">
                   {{ getStatusIcon(row.whatsapp) }}
                 </span>
               </td>
-              <td class="py-4 px-4 text-center">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-full" :class="getStatusClass(row.googleForms)">
+              <td class="hidden sm:table-cell py-3 md:py-4 px-2 md:px-4 text-center">
+                <span class="inline-flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full text-xs md:text-sm" :class="getStatusClass(row.googleForms)">
                   {{ getStatusIcon(row.googleForms) }}
                 </span>
               </td>
-              <td class="py-4 px-4 text-center">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-full" :class="getStatusClass(row.spreadsheet)">
+              <td class="hidden sm:table-cell py-3 md:py-4 px-2 md:px-4 text-center">
+                <span class="inline-flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full text-xs md:text-sm" :class="getStatusClass(row.spreadsheet)">
                   {{ getStatusIcon(row.spreadsheet) }}
                 </span>
               </td>
-              <td class="py-4 px-4 text-center">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-full" :class="getStatusClass(row.creatick)">
+              <td class="py-3 md:py-4 px-2 md:px-4 text-center">
+                <span class="inline-flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full text-xs md:text-sm" :class="getStatusClass(row.creatick)">
                   {{ getStatusIcon(row.creatick) }}
                 </span>
               </td>

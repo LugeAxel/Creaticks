@@ -1,9 +1,9 @@
 <template>
   <footer class="border-t border-border px-6 py-12 bg-surface-card/50">
     <div class="max-w-6xl mx-auto">
-      <div class="grid gap-8 md:grid-cols-5 mb-12">
+      <div class="grid grid-cols-2 gap-8 sm:grid-cols-3 md:grid-cols-5 mb-12">
         <!-- Brand -->
-        <div class="md:col-span-2 space-y-3">
+        <div class="col-span-2 sm:col-span-3 md:col-span-2 space-y-3">
           <h3 class="text-lg font-semibold text-text-heading">Creatick</h3>
           <p class="text-sm text-text-muted leading-relaxed">
             Platform ticketing untuk event komunitas lokal. Kelola tiket, pembayaran, dan check-in dalam satu dashboard.

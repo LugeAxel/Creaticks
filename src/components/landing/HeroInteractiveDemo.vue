@@ -2,7 +2,7 @@
   <div class="rounded-4xl border border-border bg-surface-card p-6 shadow-xl shadow-primary/5">
     <!-- Step Indicator -->
     <div class="flex items-center justify-between mb-6">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
         <div v-for="i in 5" :key="i" class="flex items-center gap-2">
           <button
             :class="[
