@@ -528,67 +528,66 @@ onUnmounted(() => {
                   >{{ formatTime(msg.created_at) }}</p>
                 </div>
               </div>
-            </div>
-
-          <!-- Payment Proof Form -->
-          <div v-if="activeThread && isPendingPayment" class="px-4 pt-4 border-t border-border/50 bg-surface-card">
-            <div v-if="!showProofForm" class="mb-4">
-              <button
-                class="w-full py-2.5 text-sm font-semibold text-teal-600 border-2 border-dashed border-teal-500/30 rounded-xl hover:bg-teal-500/5 transition-colors cursor-pointer"
-                @click="showProofForm = true"
-              >
-                <span class="material-symbols-outlined text-[16px] align-middle mr-1">upload</span>
-                Kirim Bukti Transfer
-              </button>
-            </div>
-            <div v-else class="mb-4 p-4 rounded-xl bg-surface-variant space-y-3">
-              <div class="flex items-center justify-between">
-                <h3 class="text-sm font-semibold text-text-heading">Kirim Bukti Transfer</h3>
-                <button class="text-text-muted hover:text-text-heading cursor-pointer" @click="showProofForm = false">
-                  <span class="material-symbols-outlined text-[18px]">close</span>
-                </button>
-              </div>
-              <div>
-                <label class="text-xs font-medium text-text-muted block mb-1">Screenshot Bukti Transfer</label>
-                <div v-if="proofFile" class="relative rounded-xl overflow-hidden border border-border/50 bg-surface-card">
-                  <img :src="proofPreviewUrl" alt="Preview" class="w-full object-cover" style="max-height: 200px;" />
-                  <button type="button" @click="removeProofFile" class="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 cursor-pointer">
-                    <span class="material-symbols-outlined text-[16px]">close</span>
+              <!-- Payment Proof Form (inside scrollable area so input bar stays visible) -->
+              <div v-if="isPendingPayment">
+                <div v-if="!showProofForm">
+                  <button
+                    class="w-full py-2.5 text-sm font-semibold text-teal-600 border-2 border-dashed border-teal-500/30 rounded-xl hover:bg-teal-500/5 transition-colors cursor-pointer"
+                    @click="showProofForm = true"
+                  >
+                    <span class="material-symbols-outlined text-[16px] align-middle mr-1">upload</span>
+                    Kirim Bukti Transfer
                   </button>
                 </div>
-                <button v-else
-                  class="w-full py-2 text-xs font-semibold text-text-muted border border-dashed border-border rounded-xl hover:bg-surface/50 transition-colors cursor-pointer"
-                  @click="fileInput?.click()"
-                >
-                  <span class="material-symbols-outlined text-[14px] align-middle mr-1">image</span>
-                  Pilih gambar bukti transfer
-                </button>
+                <div v-else class="p-4 rounded-xl bg-surface-variant space-y-3">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-text-heading">Kirim Bukti Transfer</h3>
+                    <button class="text-text-muted hover:text-text-heading cursor-pointer" @click="showProofForm = false">
+                      <span class="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-text-muted block mb-1">Screenshot Bukti Transfer</label>
+                    <div v-if="proofFile" class="relative rounded-xl overflow-hidden border border-border/50 bg-surface-card">
+                      <img :src="proofPreviewUrl" alt="Preview" class="w-full object-cover" style="max-height: 200px;" />
+                      <button type="button" @click="removeProofFile" class="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 cursor-pointer">
+                        <span class="material-symbols-outlined text-[16px]">close</span>
+                      </button>
+                    </div>
+                    <button v-else
+                      class="w-full py-2 text-xs font-semibold text-text-muted border border-dashed border-border rounded-xl hover:bg-surface/50 transition-colors cursor-pointer"
+                      @click="fileInput?.click()"
+                    >
+                      <span class="material-symbols-outlined text-[14px] align-middle mr-1">image</span>
+                      Pilih gambar bukti transfer
+                    </button>
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-text-muted block mb-1">Nomor Referensi *</label>
+                    <input v-model="proofRef" type="text" placeholder="Contoh: BCA-20260607-91823" class="w-full rounded-xl border border-border/50 bg-white/90 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-text-muted block mb-1">Bank/E-Wallet Tujuan *</label>
+                    <select v-model="proofBank" class="w-full rounded-xl border border-border/50 bg-white/90 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20">
+                      <option value="">Pilih bank</option>
+                      <option v-for="bank in bankOptions" :key="bank" :value="bank">{{ bank }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-text-muted block mb-1">Jumlah Transfer *</label>
+                    <input v-model.number="proofAmount" type="number" min="0" placeholder="Rp" class="w-full rounded-xl border border-border/50 bg-white/90 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+                  </div>
+                  <p v-if="proofError" class="text-xs text-error">{{ proofError }}</p>
+                  <button
+                    class="w-full py-2.5 text-sm font-semibold text-white bg-teal-500 rounded-xl hover:bg-teal-600 disabled:opacity-50 transition-colors cursor-pointer"
+                    :disabled="proofSubmitting"
+                    @click="submitProof"
+                  >
+                    {{ proofSubmitting ? 'Mengirim...' : 'Kirim Bukti Transfer' }}
+                  </button>
+                </div>
               </div>
-              <div>
-                <label class="text-xs font-medium text-text-muted block mb-1">Nomor Referensi *</label>
-                <input v-model="proofRef" type="text" placeholder="Contoh: BCA-20260607-91823" class="w-full rounded-xl border border-border/50 bg-white/90 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
-              </div>
-              <div>
-                <label class="text-xs font-medium text-text-muted block mb-1">Bank/E-Wallet Tujuan *</label>
-                <select v-model="proofBank" class="w-full rounded-xl border border-border/50 bg-white/90 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20">
-                  <option value="">Pilih bank</option>
-                  <option v-for="bank in bankOptions" :key="bank" :value="bank">{{ bank }}</option>
-                </select>
-              </div>
-              <div>
-                <label class="text-xs font-medium text-text-muted block mb-1">Jumlah Transfer *</label>
-                <input v-model.number="proofAmount" type="number" min="0" placeholder="Rp" class="w-full rounded-xl border border-border/50 bg-white/90 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
-              </div>
-              <p v-if="proofError" class="text-xs text-error">{{ proofError }}</p>
-              <button
-                class="w-full py-2.5 text-sm font-semibold text-white bg-teal-500 rounded-xl hover:bg-teal-600 disabled:opacity-50 transition-colors cursor-pointer"
-                :disabled="proofSubmitting"
-                @click="submitProof"
-              >
-                {{ proofSubmitting ? 'Mengirim...' : 'Kirim Bukti Transfer' }}
-              </button>
             </div>
-          </div>
 
           <div v-if="activeThread?.is_active" class="shrink-0 p-4 border-t border-border/50 bg-surface-card">
             <form @submit.prevent="sendMessage" class="flex gap-2">
