@@ -501,40 +501,80 @@ router.put('/:id', requireAuth, async (req, res) => {
   })
 
   if (ticket_tiers !== undefined && Array.isArray(ticket_tiers)) {
-    const { error: deleteError } = await supabaseAdmin
+    // Fetch existing tiers by name to preserve UUIDs (avoids ON DELETE SET NULL on venue_seats.tier_id)
+    const { data: existingTiers } = await supabaseAdmin
       .from('ticket_tiers')
-      .delete()
+      .select('id, name, sold_count')
       .eq('event_id', id)
 
-    if (deleteError) {
-      logger.error('EVENTS-UPDATE', 'Failed to delete old ticket tiers', {
-        requestId: req.requestId,
-        eventId: id,
-        error: deleteError.message
-      })
+    const existingByName = {}
+    if (existingTiers) {
+      for (const t of existingTiers) {
+        existingByName[t.name] = t
+      }
     }
 
-    if (ticket_tiers.length > 0) {
-      const tierRows = ticket_tiers.map(t => ({
-        event_id: id,
-        name: t.name || 'Regular',
-        price: t.price || 0,
-        quota: Math.max(1, t.limit || t.quota || 1),
-        description: t.description || '',
-        color: t.color || '#6C63FF',
-        seat_tier: t.seat_tier || false
-      }))
+    const processedNames = new Set()
 
-      const { error: insertError } = await supabaseAdmin
-        .from('ticket_tiers')
-        .insert(tierRows)
+    for (const t of ticket_tiers) {
+      const name = t.name || 'Regular'
+      processedNames.add(name)
 
-      if (insertError) {
-        logger.error('EVENTS-UPDATE', 'Failed to insert new ticket tiers', {
-          requestId: req.requestId,
-          eventId: id,
-          error: insertError.message
-        })
+      if (existingByName[name]) {
+        // UPDATE preserves UUID — seat tier_id references stay intact
+        const existing = existingByName[name]
+        const { error: updateError } = await supabaseAdmin
+          .from('ticket_tiers')
+          .update({
+            price: t.price || 0,
+            quota: Math.max(1, t.limit || t.quota || 1),
+            description: t.description || '',
+            color: t.color || '#6C63FF',
+            seat_tier: t.seat_tier || false,
+            sold_count: existing.sold_count || 0
+          })
+          .eq('id', existing.id)
+
+        if (updateError) {
+          logger.error('EVENTS-UPDATE', 'Failed to update ticket tier', {
+            requestId: req.requestId,
+            eventId: id,
+            tierName: name,
+            error: updateError.message
+          })
+        }
+      } else {
+        // INSERT for new tiers
+        const { error: insertError } = await supabaseAdmin
+          .from('ticket_tiers')
+          .insert({
+            event_id: id,
+            name,
+            price: t.price || 0,
+            quota: Math.max(1, t.limit || t.quota || 1),
+            description: t.description || '',
+            color: t.color || '#6C63FF',
+            seat_tier: t.seat_tier || false
+          })
+
+        if (insertError) {
+          logger.error('EVENTS-UPDATE', 'Failed to insert new ticket tier', {
+            requestId: req.requestId,
+            eventId: id,
+            tierName: name,
+            error: insertError.message
+          })
+        }
+      }
+    }
+
+    // Remove tiers that were deleted by the creator (cascade will nullify venue_seats references — expected)
+    for (const [name, existing] of Object.entries(existingByName)) {
+      if (!processedNames.has(name)) {
+        await supabaseAdmin
+          .from('ticket_tiers')
+          .delete()
+          .eq('id', existing.id)
       }
     }
   }

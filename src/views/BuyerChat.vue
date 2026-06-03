@@ -397,7 +397,7 @@ onUnmounted(() => {
 
 <template>
   <AppLayout title="Chat Penyelenggara">
-    <div class="h-dvh flex flex-col overflow-hidden px-4 md:px-6 max-w-6xl mx-auto">
+    <div class="h-dvh flex flex-col overflow-hidden px-4 md:px-6 max-w-6xl mx-auto mb-20">
       <div class="shrink-0 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 class="text-xl font-heading font-bold text-text-heading">Chat Penyelenggara</h1>

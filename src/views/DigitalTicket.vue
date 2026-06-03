@@ -5,6 +5,8 @@ import { useAuth } from '@/composables/useAuth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
 import QRCodeStyling from 'qr-code-styling'
+import SeatMap from '@/components/seats/SeatMap.vue'
+import type { SeatData, TierInfo } from '@/components/seats/SeatMap.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +32,7 @@ interface TicketData {
   checked_in_at: string | null
   qr_data: string
   thread_id: string | null
+  seat: { seat_code: string } | null
 }
 
 interface TicketDesign {
@@ -61,6 +64,15 @@ const rated = ref(false)
 const memoryNote = ref('')
 
 const ticket = ref<TicketData | null>(null)
+const showSeatMap = ref(false)
+const seatMapGrid = ref({ gridX: 0, gridY: 0 })
+const seatMapSeats = ref<SeatData[]>([])
+const seatMapTiers = ref<TierInfo[]>([])
+
+const selectedSeatIds = computed(() => {
+  const s = seatMapSeats.value.find(s => s.status === 'owned')
+  return s ? [s.id] : []
+})
 const design = ref<TicketDesign | null>(null)
 const loading = ref(true)
 const error = ref('')
@@ -296,8 +308,6 @@ const renderQR = async (data: string, size: number = 200) => {
   }
 
   try {
-    const accent = design.value?.accent_color || '#6C63FF'
-
     let logoDataUrl: string | undefined
     try {
       logoDataUrl = await getImageAsDataUrl('/creatick_logo.png')
@@ -315,10 +325,10 @@ const renderQR = async (data: string, size: number = 200) => {
       margin: Math.round(size * 0.04),
       qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'H' },
       imageOptions: { hideBackgroundDots: true, imageSize: 0.7, margin: 4, crossOrigin: 'anonymous' },
-      dotsOptions: { type: 'classy-rounded', color: accent },
+      dotsOptions: { type: 'rounded', color: '#4A42D4' },
       backgroundOptions: { color: '#ffffff' },
-      cornersSquareOptions: { type: 'extra-rounded', color: accent },
-      cornersDotOptions: { type: 'dot', color: accent },
+      cornersSquareOptions: { type: 'rounded', color: '#4A42D4' },
+      cornersDotOptions: { type: 'dot', color: '#4A42D4' },
       ...(logoDataUrl ? { image: logoDataUrl } : {})
     })
 
@@ -367,6 +377,42 @@ onMounted(async () => {
       }
     } catch (e) {
       console.warn('Failed to load custom ticket design:', e)
+    }
+
+    // Fetch seat map data
+    if (t.seat) {
+      try {
+        const [eventRes, seatsRes] = await Promise.all([
+          fetch(`/api/events/${t.event_id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          fetch(`/api/seats/events/${t.event_id}/seats/public`)
+        ])
+        if (eventRes.ok && seatsRes.ok) {
+          const eventData = await eventRes.json()
+          const seatsData = await seatsRes.json()
+          const sm = eventData.event?.seat_map
+          if (sm && sm.gridX && sm.gridY) {
+            seatMapGrid.value = { gridX: sm.gridX, gridY: sm.gridY }
+            seatMapTiers.value = (eventData.event?.ticket_tiers || []).map((tier: any) => ({
+              id: tier.id,
+              name: tier.name,
+              price: tier.price,
+              color: tier.color || '#6C63FF'
+            }))
+            seatMapSeats.value = (seatsData.seats || []).map((s: any) => ({
+              id: s.id,
+              seat_code: s.seat_code,
+              tier_id: s.tier_id,
+              x: s.x,
+              y: s.y,
+              status: s.seat_code === t.seat!.seat_code ? 'owned' : 'available'
+            }))
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load seat map:', e)
+      }
     }
 
   } catch {
@@ -485,6 +531,7 @@ onUnmounted(() => {
               <div class="flex-1 min-w-0 text-right">
                 <p class="text-sm font-bold leading-tight" :class="fontClass" :style="{ color: 'var(--ticket-text)' }">{{ ticket.holder_name }}</p>
                 <p class="text-[9px] font-mono mt-1.5" :style="{ color: 'var(--ticket-sub)' }">{{ ticket.tier_name }}</p>
+                <p v-if="ticket.seat" class="text-[9px] font-mono mt-0.5" :style="{ color: 'var(--ticket-accent)' }">Kursi {{ ticket.seat.seat_code }}</p>
                 <div class="flex items-center justify-end gap-1 mt-2">
                   <button @click="idRevealed = !idRevealed" class="flex items-center gap-0.5 cursor-pointer group">
                     <span class="material-symbols-outlined text-[12px]" :style="{ color: 'var(--ticket-sub)' }">{{ idRevealed ? 'visibility' : 'visibility_off' }}</span>
@@ -546,6 +593,7 @@ onUnmounted(() => {
               <div>
                 <p class="text-xs font-bold" :class="fontClass" :style="{ color: 'var(--ticket-text)' }">{{ ticket.holder_name }}</p>
                 <p class="text-[10px] font-mono" :style="{ color: 'var(--ticket-sub)' }">{{ ticket.tier_name }}</p>
+                <p v-if="ticket.seat" class="text-[10px] font-mono mt-0.5" :style="{ color: 'var(--ticket-accent)' }">Kursi {{ ticket.seat.seat_code }}</p>
                 <div class="flex items-center justify-center gap-1 mt-1">
                   <button @click="idRevealed = !idRevealed" class="flex items-center gap-0.5 cursor-pointer group">
                     <span class="material-symbols-outlined text-[12px]" :style="{ color: 'var(--ticket-sub)' }">{{ idRevealed ? 'visibility' : 'visibility_off' }}</span>
@@ -595,6 +643,7 @@ onUnmounted(() => {
               <div>
                 <p class="text-sm font-bold text-white" :class="fontClass">{{ ticket.holder_name }}</p>
                 <p class="text-[10px]" :style="{ color: 'var(--ticket-sub)' }">{{ formatShortDate(ticket.event_date) }} · {{ formatTime(ticket.event_date) }}</p>
+                <p v-if="ticket.seat" class="text-[10px] mt-0.5" :style="{ color: 'var(--ticket-accent)' }">Kursi {{ ticket.seat.seat_code }}</p>
                 <div class="flex items-center justify-center gap-1 mt-1">
                   <button @click="idRevealed = !idRevealed" class="flex items-center gap-0.5 cursor-pointer group">
                     <span class="material-symbols-outlined text-[12px] text-white/60">{{ idRevealed ? 'visibility' : 'visibility_off' }}</span>
@@ -619,6 +668,29 @@ onUnmounted(() => {
 
         </div>
         <!-- END Ticket Card Container -->
+
+        <!-- Denah Kursi -->
+        <div v-if="seatMapSeats.length && ticket && ticket.seat" class="mt-5 bg-surface-card rounded-2xl shadow-sm overflow-hidden">
+          <button @click="showSeatMap = !showSeatMap" class="w-full flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-surface transition">
+            <span class="flex items-center gap-2 text-sm font-semibold text-text-heading">
+              <span class="material-symbols-outlined text-lg text-primary">event_seat</span>
+              Denah Kursi
+              <span class="text-xs font-normal text-text-muted">({{ ticket.seat.seat_code }})</span>
+            </span>
+            <span class="material-symbols-outlined text-text-muted transition" :class="showSeatMap ? 'rotate-180' : ''">expand_more</span>
+          </button>
+          <div v-if="showSeatMap" class="px-4 pb-4">
+            <SeatMap
+              :seats="seatMapSeats"
+              :gridX="seatMapGrid.gridX"
+              :gridY="seatMapGrid.gridY"
+              :tiers="seatMapTiers"
+              :readonly="true"
+              :cellSize="16"
+              :selectedSeatIds="selectedSeatIds"
+            />
+          </div>
+        </div>
 
         <!-- LIVING OBJECT SECTIONS -->
 

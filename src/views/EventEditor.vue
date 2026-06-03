@@ -423,6 +423,17 @@ const extractTime = (dateStr: string) => {
   return `${h}:${m}`
 }
 
+const TIMEZONE_OFFSETS: Record<string, string> = {
+  'Asia/Jakarta': '+07:00',
+  'Asia/Makassar': '+08:00',
+  'Asia/Jayapura': '+09:00',
+}
+
+function formatDateWithTimezone(date: string, time: string, timezone: string): string {
+  const offset = TIMEZONE_OFFSETS[timezone] || '+00:00'
+  return `${date}T${time || '00:00'}:00${offset}`
+}
+
 onMounted(async () => {
   if (!isEditing.value) return
   loadingEvent.value = true
@@ -530,7 +541,7 @@ const handleSaveDraft = async () => {
 
   try {
     const dateStr = eventData.value.date
-      ? `${eventData.value.date}T${eventData.value.event_start_time || '00:00'}:00`
+      ? formatDateWithTimezone(eventData.value.date, eventData.value.event_start_time, eventData.value.timezone)
       : new Date().toISOString()
 
     const url = isEditing.value ? `/api/events/${eventIdParam.value}` : '/api/events'
@@ -567,19 +578,25 @@ const handleSaveDraft = async () => {
     const savedEvent = await res.json()
     const eventId = savedEvent.event?.id || eventIdParam.value
 
+    showToast(isEditing.value ? 'Acara berhasil diperbarui' : 'Acara berhasil disimpan', 'success')
+
     // Auto-generate seats if seat map is enabled
     if (useSeatMap.value && seatMapData.value.seats.length > 0) {
-      const ok = await generateSeats(eventId, token)
-      if (!ok && seatConflictModal.value) {
-        pendingSeatSaveAction.value = 'draft'
-        saving.value = false
-        return
+      try {
+        const ok = await generateSeats(eventId, token)
+        if (!ok && seatConflictModal.value) {
+          pendingSeatSaveAction.value = 'draft'
+          saving.value = false
+          return
+        }
+      } catch {
+        showToast('Acara tersimpan, namun beberapa kursi mungkin perlu diatur ulang', 'warning')
       }
     }
 
     router.push({ name: 'creator-dashboard' })
   } catch {
-    error.value = 'Gagal menyimpan acara'
+    showToast(isEditing.value ? 'Gagal menyimpan perubahan' : 'Gagal menyimpan acara', 'error')
     saving.value = false
   }
 }
@@ -609,7 +626,7 @@ const handlePublish = async () => {
     }
 
     const dateStr = eventData.value.date
-      ? `${eventData.value.date}T${eventData.value.event_start_time || '00:00'}:00`
+      ? formatDateWithTimezone(eventData.value.date, eventData.value.event_start_time, eventData.value.timezone)
       : new Date().toISOString()
 
     const url = isEditing.value ? `/api/events/${eventIdParam.value}` : '/api/events'
@@ -646,19 +663,25 @@ const handlePublish = async () => {
     const savedEvent = await res.json()
     const eventId = savedEvent.event?.id || eventIdParam.value
 
+    showToast(isEditing.value ? 'Acara berhasil diperbarui' : 'Acara berhasil dipublikasi', 'success')
+
     // Auto-generate seats if seat map is enabled
     if (useSeatMap.value && seatMapData.value.seats.length > 0) {
-      const ok = await generateSeats(eventId, token)
-      if (!ok && seatConflictModal.value) {
-        pendingSeatSaveAction.value = 'publish'
-        saving.value = false
-        return
+      try {
+        const ok = await generateSeats(eventId, token)
+        if (!ok && seatConflictModal.value) {
+          pendingSeatSaveAction.value = 'publish'
+          saving.value = false
+          return
+        }
+      } catch {
+        showToast('Acara berhasil dipublikasi, namun beberapa kursi mungkin perlu diatur ulang', 'warning')
       }
     }
 
     router.push({ name: 'creator-dashboard' })
   } catch {
-    error.value = 'Gagal mempublikasi acara'
+    showToast(isEditing.value ? 'Gagal menyimpan perubahan publikasi' : 'Gagal mempublikasi acara', 'error')
     saving.value = false
   }
 }
@@ -1023,6 +1046,7 @@ const removeInvitedAdmin = (idx: number) => {
               <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined text-lg text-text-muted">event_seat</span>
                 <span class="text-sm font-semibold text-text">Tiket Kursi</span>
+                <span v-if="hasExistingSeats && tier.seat_tier" class="text-[10px] font-semibold bg-primary/10 text-primary rounded-full px-2 py-0.5">{{ paintedSeatCountPerTier[tier.name] || 0 }} kursi</span>
               </div>
               <label class="relative inline-flex items-center" :class="hasExistingSeats ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'">
                 <input type="checkbox" v-model="tier.seat_tier" class="sr-only peer" :disabled="hasExistingSeats" />

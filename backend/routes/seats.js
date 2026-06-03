@@ -79,6 +79,51 @@ router.get('/events/:eventId/seats/public', async (req, res) => {
   res.json({ seats })
 })
 
+// Overview seats with owner info (for manage panel)
+router.get('/events/:eventId/seats/overview', requireAuth, async (req, res) => {
+  const { eventId } = req.params
+
+  const event = await verifyEventAccess(eventId, req.user.id)
+  if (!event) {
+    return res.status(403).json({ error: 'Akses ditolak' })
+  }
+
+  const { data: seats, error } = await supabaseAdmin
+    .from('venue_seats')
+    .select(`
+      id, seat_code, tier_id, x, y, status,
+      ticket_requests(user_id)
+    `)
+    .eq('event_id', eventId)
+    .order('y', { ascending: true })
+    .order('x', { ascending: true })
+
+  if (error) {
+    logger.error('SEATS-OVERVIEW', 'Failed to fetch seats', {
+      requestId: req.requestId,
+      eventId,
+      error: error.message
+    })
+    return res.status(500).json({ error: 'Gagal mengambil data kursi' })
+  }
+
+  // Enrich with owner names
+  const enriched = await Promise.all(seats.map(async (s) => {
+    let owner_name = null
+    const tr = s.ticket_requests
+    const userId = Array.isArray(tr) ? tr[0]?.user_id : tr?.user_id
+    if (userId) {
+      try {
+        const { data: user } = await supabaseAdmin.auth.admin.getUserById(userId)
+        owner_name = user?.user?.user_metadata?.name || user?.user?.email?.split('@')[0] || null
+      } catch {}
+    }
+    return { id: s.id, seat_code: s.seat_code, tier_id: s.tier_id, x: s.x, y: s.y, status: s.status, owner_name }
+  }))
+
+  res.json({ seats: enriched })
+})
+
 // Lock a seat (atomic, FOR UPDATE NOWAIT)
 router.post('/seat-locks', requireAuth, async (req, res) => {
   const { seatId, ticketTypeId, sessionId } = req.body
@@ -267,14 +312,20 @@ router.post('/events/:eventId/seats/generate', requireAuth, async (req, res) => 
   }
 
   // Build seat rows
-  const seatRows = seats.map(s => ({
-    event_id: eventId,
-    seat_code: s.seatCode || `${String.fromCharCode(65 + s.y)}${s.x + 1}`,
-    tier_id: s.tier ? (tierMap[s.tier] || null) : null,
-    x: s.x,
-    y: s.y,
-    status: 'available'
-  }))
+  const seatRows = seats.map(s => {
+    let resolvedTierId = null
+    if (s.tier) {
+      resolvedTierId = tierMap[s.tier] || tierMap[Object.keys(tierMap).find(k => k.toLowerCase().trim() === s.tier.toLowerCase().trim())] || null
+    }
+    return {
+      event_id: eventId,
+      seat_code: s.seatCode || `${String.fromCharCode(65 + s.y)}${s.x + 1}`,
+      tier_id: resolvedTierId,
+      x: s.x,
+      y: s.y,
+      status: 'available'
+    }
+  })
 
   // Insert in batches
   const batchSize = 100

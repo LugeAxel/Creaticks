@@ -81,7 +81,7 @@ const startScanner = async () => {
 
     await scanner.start(
       cam.id,
-      { fps: 5, qrbox: { width: 280, height: 280 }, aspectRatio: 1 },
+      { fps: 15, qrbox: { width: 350, height: 350 }, aspectRatio: 1 },
       onScanSuccess,
       () => {}
     )
@@ -212,7 +212,8 @@ const decodeQrFromImage = async (file: File) => {
     codeScanner.clear()
     if (result && !scanLocked) {
       scanLocked = true
-      validateTicket(result)
+      if (scanMode.value === 'attendance') validateTicket(result)
+      else handleIdentify(result)
     }
   } catch (e) {
     console.warn('Failed to decode QR from image:', e)

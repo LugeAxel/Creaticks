@@ -591,6 +591,13 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data: user } = await supabaseAdmin.auth.admin.getUserById(userId)
   const holderName = user?.user?.user_metadata?.name || user?.user?.email || 'Unknown'
 
+  // Fetch seat
+  const { data: seat } = await supabaseAdmin
+    .from('venue_seats')
+    .select('seat_code')
+    .eq('ticket_id', id)
+    .maybeSingle()
+
   const result = {
     id: ticket.id,
     event_id: ticket.event_id,
@@ -608,7 +615,8 @@ router.get('/:id', requireAuth, async (req, res) => {
     is_checked_in: ticket.is_checked_in || false,
     checked_in_at: ticket.checked_in_at || null,
     qr_data: ticket.id,
-    thread_id: thread?.id || null
+    thread_id: thread?.id || null,
+    seat: seat ? { seat_code: seat.seat_code } : null
   }
 
   res.json({ ticket: result })
@@ -1397,7 +1405,7 @@ router.get('/:id/identify', requireAuth, async (req, res) => {
   const { data: seat } = await supabaseAdmin
     .from('venue_seats')
     .select('seat_code, tier_id, status')
-    .eq('reserved_by', id)
+    .eq('ticket_id', id)
     .maybeSingle()
   if (seat) seatInfo = seat
 

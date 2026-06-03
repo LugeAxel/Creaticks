@@ -31,4 +31,8 @@ function idempotencyMiddleware(req, res, next) {
   next()
 }
 
-export { idempotencyMiddleware }
+function clearStore() {
+  store.clear()
+}
+
+export { idempotencyMiddleware, clearStore }

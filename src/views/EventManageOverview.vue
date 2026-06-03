@@ -1,15 +1,25 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEventContext } from '@/composables/useEventContext'
 import { supabase } from '@/lib/supabase'
 import SkeletonPage from '@/components/shared/SkeletonPage.vue'
+import SeatMap from '@/components/seats/SeatMap.vue'
+import type { SeatData, TierInfo } from '@/components/seats/SeatMap.vue'
 
 const router = useRouter()
 const { event } = useEventContext()
 
 const stats = ref({ total: 0, pending: 0, checkedIn: 0, revenue: 0 })
 const loading = ref(true)
+
+const seats = ref<SeatData[]>([])
+const seatMapGrid = ref({ gridX: 0, gridY: 0 })
+const seatMapTiers = ref<TierInfo[]>([])
+const selectedSeat = ref<SeatData | null>(null)
+const showOwnerModal = ref(false)
+
+const seatMapEnabled = computed(() => seatMapGrid.value.gridX > 0 && seatMapGrid.value.gridY > 0)
 
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('id-ID', {
@@ -20,11 +30,16 @@ const formatDate = (dateStr: string) => {
 onMounted(async () => {
   try {
     const token = (await supabase.auth.getSession()).data.session?.access_token
-    const res = await fetch(`/api/tickets/event/${event.id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (res.ok) {
-      const data = await res.json()
+    const [statsRes, seatsRes] = await Promise.all([
+      fetch(`/api/tickets/event/${event.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      fetch(`/api/events/${event.id}/seats/overview`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+    ])
+    if (statsRes.ok) {
+      const data = await statsRes.json()
       const tickets = data.tickets || []
       stats.value = {
         total: tickets.length,
@@ -33,8 +48,35 @@ onMounted(async () => {
         revenue: tickets.filter((t: any) => t.status === 'confirmed').length * 50000
       }
     }
+    if (seatsRes.ok) {
+      const data = await seatsRes.json()
+      const rawSeats = data.seats || []
+      seats.value = rawSeats.map((s: any) => ({
+        id: s.id,
+        seat_code: s.seat_code,
+        tier_id: s.tier_id,
+        x: s.x,
+        y: s.y,
+        status: s.status === 'sold' ? 'owned' : s.status,
+        owner_name: s.owner_name
+      }))
+      if ((event as any).seat_map) {
+        const sm = typeof (event as any).seat_map === 'string' ? JSON.parse((event as any).seat_map) : (event as any).seat_map
+        if (sm?.gridX && sm?.gridY) {
+          seatMapGrid.value = { gridX: sm.gridX, gridY: sm.gridY }
+        }
+      }
+      if ((event as any).ticket_tiers) {
+        seatMapTiers.value = (event as any).ticket_tiers.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          price: t.price,
+          color: t.color || '#6C63FF'
+        }))
+      }
+    }
   } catch (e) {
-    console.warn('Failed to fetch overview stats:', e)
+    console.warn('Failed to fetch overview data:', e)
   } finally {
     loading.value = false
   }
@@ -93,6 +135,49 @@ onMounted(async () => {
           >
             <span class="material-symbols-outlined text-primary">qr_code_scanner</span>
             <span class="text-sm font-medium text-text-heading">Scan QR</span>
+          </button>
+        </div>
+      </div>
+
+      <div v-if="seatMapEnabled" class="bg-surface-card rounded-xl border border-border/50 p-5">
+        <h2 class="text-sm font-semibold text-text-heading mb-4">Denah Kursi</h2>
+        <div class="overflow-x-auto">
+          <SeatMap
+            :seats="seats"
+            :gridX="seatMapGrid.gridX"
+            :gridY="seatMapGrid.gridY"
+            :tiers="seatMapTiers"
+            :readonly="true"
+            :showOwnerInfo="true"
+            :cellSize="28"
+            @info="(s) => { selectedSeat = s; showOwnerModal = true }"
+          />
+        </div>
+      </div>
+
+      <!-- Owner Info Modal -->
+      <div v-if="showOwnerModal && selectedSeat" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" @click.self="showOwnerModal = false">
+        <div class="bg-surface-card rounded-2xl shadow-xl p-6 max-w-sm w-full">
+          <div class="flex items-center gap-3 mb-4">
+            <span class="material-symbols-outlined text-2xl text-primary">event_seat</span>
+            <h3 class="text-lg font-heading font-bold text-text-heading">Info Kursi</h3>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-text-muted">Kursi</span>
+              <span class="font-semibold text-text-heading">{{ selectedSeat.seat_code }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-text-muted">Status</span>
+              <span class="font-semibold" :class="selectedSeat.status === 'checked_in' ? 'text-teal-500' : 'text-amber-600'">{{ selectedSeat.status === 'checked_in' ? 'Check-in' : 'Terjual' }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-text-muted">Pemilik</span>
+              <span class="font-semibold text-text-heading">{{ selectedSeat.owner_name || '-' }}</span>
+            </div>
+          </div>
+          <button class="mt-5 w-full py-2 rounded-xl bg-primary text-white text-sm font-semibold cursor-pointer hover:bg-primary/90 transition" @click="showOwnerModal = false">
+            Tutup
           </button>
         </div>
       </div>

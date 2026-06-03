@@ -9,6 +9,7 @@ export interface SeatData {
   y: number
   status: 'available' | 'reserved' | 'owned' | 'checked_in'
   reserved_until?: string | null
+  owner_name?: string | null
 }
 
 export interface TierInfo {
@@ -48,17 +49,20 @@ const props = withDefaults(defineProps<{
   filterTierId?: string
   pendingSeatIds?: string[]
   otherTierSelectedIds?: string[]
+  showOwnerInfo?: boolean
 }>(), {
   selectedSeatIds: () => [],
   readonly: false,
   cellSize: 40,
   filterTierId: undefined,
   pendingSeatIds: () => [],
-  otherTierSelectedIds: () => []
+  otherTierSelectedIds: () => [],
+  showOwnerInfo: false
 })
 
 const emit = defineEmits<{
   select: [seatId: string]
+  info: [seat: SeatData]
 }>()
 
 const tierColorMap = computed(() => {
@@ -71,7 +75,7 @@ const tierColorMap = computed(() => {
 })
 
 const isOtherTier = (seat: SeatData) =>
-  props.filterTierId && seat.tier_id !== props.filterTierId
+  props.filterTierId && seat.tier_id && seat.tier_id !== props.filterTierId
 
 const seatClass = (seat: SeatData) => {
   const cfg = STATUS_STYLES[seat.status]
@@ -130,6 +134,10 @@ const rows = computed(() => {
 })
 
 const handleClick = (seat: SeatData) => {
+  if (props.showOwnerInfo && seat.status !== 'available' && seat.owner_name) {
+    emit('info', seat)
+    return
+  }
   if (props.readonly) return
   if (seat.status !== 'available') return
   if (isOtherTier(seat)) return
@@ -182,7 +190,7 @@ const stageCells = computed(() => {
           'rounded-lg border transition-all select-none flex flex-col items-center justify-center leading-tight overflow-hidden',
           ...seatClass(seat)
         ]"
-        :title="seat.status === 'available' && isOtherTier(seat) ? 'Kursi ini milik tiket lain' : `${seat.seat_code} - ${seat.status}`"
+        :title="showOwnerInfo && seat.owner_name ? `${seat.seat_code} - ${seat.owner_name}` : seat.status === 'available' && isOtherTier(seat) ? 'Kursi ini milik tiket lain' : `${seat.seat_code} - ${seat.status}`"
         @click="handleClick(seat)"
       >
         <span class="font-bold" :class="seat.status === 'available' ? 'text-[9px]' : 'text-[7px]'">{{ seat.seat_code }}</span>
