@@ -1276,15 +1276,17 @@ const removeInvitedAdmin = (idx: number) => {
         </div>
 
         <div class="flex justify-between">
-          <BaseButton variant="outline" @click="prevStep">Kembali</BaseButton>
-          <div class="flex flex-col gap-2 items-end">
-            <HCaptcha
+          <div class="flex flex-col gap-2 items-end w-full">
+            <div class="flex items-center  justify-between w-full">
+              <BaseButton variant="outline" @click="prevStep">Kembali</BaseButton>
+              <HCaptcha
               ref="captchaRef"
-              v-if="!isEditing && !captchaToken"
+              v-if="!isEditing"
               :sitekey="hCaptchaSiteKey"
               @verify="onCaptchaVerified"
               @expired="onCaptchaExpired"
-            />
+              />
+            </div>
             <div class="flex gap-3">
               <BaseButton variant="outline" :loading="saving" @click="handleSaveDraft" :disabled="!isEditing && !captchaToken">
                 Simpan Draft

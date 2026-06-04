@@ -4,6 +4,7 @@ import { verifyCaptcha } from '../middleware/captcha.js'
 import { logger } from '../logger.js'
 import supabaseAdmin from '../lib/supabase.js'
 import { logAdminAction } from '../lib/audit.js'
+import { generateUniqueSlug } from '../utils/slug.js'
 
 const MAX_TITLE_LENGTH = 200
 const MAX_DESC_LENGTH = 5000
@@ -229,16 +230,20 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params
   const userId = req.user.id
 
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  const column = isUuid ? 'id' : 'slug'
+
   const { data: event, error } = await supabaseAdmin
     .from('events')
     .select(EVENT_SELECT)
-    .eq('id', id)
+    .eq(column, id)
     .single()
 
   if (error || !event) {
     return res.status(404).json({ error: 'Acara tidak ditemukan' })
   }
 
+  const eventId = event.id
   const isPublic = event.status === 'published' && event.visibility === 'public'
 
   // Creator always gets full access regardless of visibility
@@ -250,7 +255,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data: adminRole } = await supabaseAdmin
     .from('event_roles')
     .select('id, roles')
-    .eq('event_id', id)
+    .eq('event_id', eventId)
     .eq('user_id', userId)
     .eq('status', 'accepted')
     .maybeSingle()
@@ -266,7 +271,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data: ticket } = await supabaseAdmin
     .from('ticket_requests')
     .select('id')
-    .eq('event_id', id)
+    .eq('event_id', eventId)
     .eq('user_id', userId)
     .in('status', ['confirmed', 'completed'])
     .maybeSingle()
@@ -337,10 +342,13 @@ router.post('/', requireAuth, verifyCaptcha, async (req, res) => {
     return res.status(400).json({ error: 'Waktu mulai dan selesai tidak boleh sama' })
   }
 
+  const slug = await generateUniqueSlug(supabaseAdmin, title.trim())
+
   const { data: event, error } = await supabaseAdmin
     .from('events')
     .insert({
       creator_id: req.user.id,
+      slug,
       title: title.trim(),
       description: description || '',
       banner_url: banner_url || '',
@@ -437,7 +445,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 
   const { data: existing, error: fetchError } = await supabaseAdmin
     .from('events')
-    .select('creator_id')
+    .select('creator_id, title, slug')
     .eq('id', id)
     .single()
 
@@ -474,6 +482,10 @@ router.put('/:id', requireAuth, async (req, res) => {
   if (event_start_time !== undefined) updates.event_start_time = event_start_time
   if (event_end_time !== undefined) updates.event_end_time = event_end_time
   if (timezone !== undefined) updates.timezone = timezone
+  if (updates.title && updates.title !== existing.title) {
+    updates.slug = await generateUniqueSlug(supabaseAdmin, updates.title, id)
+  }
+
   updates.updated_at = new Date().toISOString()
 
   const { data: event, error } = await supabaseAdmin

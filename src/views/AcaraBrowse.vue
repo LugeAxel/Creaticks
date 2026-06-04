@@ -19,6 +19,7 @@ interface TicketTier {
 
 interface EventItem {
   id: string
+  slug: string
   title: string
   description: string
   banner_url: string

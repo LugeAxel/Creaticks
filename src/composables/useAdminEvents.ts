@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 
 export interface MyEvent {
   id: string
+  slug: string
   title: string
   date: string
   location: string

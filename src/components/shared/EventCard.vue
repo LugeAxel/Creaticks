@@ -18,6 +18,7 @@ interface TicketTier {
 
 interface EventItem {
   id: string
+  slug: string
   title: string
   description: string
   banner_url: string
@@ -71,7 +72,7 @@ let shareTimer: ReturnType<typeof setTimeout> | null = null
 
 function handleShare(e: MouseEvent) {
   e.stopPropagation()
-  navigator.clipboard.writeText(`${origin}/events/${props.event.id}`)
+  navigator.clipboard.writeText(`${origin}/events/${props.event.slug}`)
   shareCopied.value = true
   if (shareTimer) clearTimeout(shareTimer)
   shareTimer = setTimeout(() => { shareCopied.value = false }, 2000)
@@ -199,7 +200,7 @@ const handleClick = () => {
   if (props.userRole) {
     router.push(`/events/${props.event.id}/manage`)
   } else {
-    router.push({ name: 'event-detail', params: { id: props.event.id } })
+    router.push({ name: 'event-detail', params: { id: props.event.slug } })
   }
 }
 </script>

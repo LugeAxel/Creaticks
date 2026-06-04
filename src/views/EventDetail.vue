@@ -766,7 +766,6 @@ function getTierName(tierId: string | null) {
               <HCaptcha
                 class="transform scale-[0.65] origin-right -translate-x-1 -translate-y-1 max-w-[150px]:"
                 ref="captchaRef"
-                v-if="!captchaToken"
                 :sitekey="hCaptchaSiteKey"
                 size="compact"
                 @verify="onCaptchaVerified"

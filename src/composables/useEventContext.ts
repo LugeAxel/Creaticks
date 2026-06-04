@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 
 export interface EventData {
   id: string
+  slug: string
   title: string
   date: string
   location: string

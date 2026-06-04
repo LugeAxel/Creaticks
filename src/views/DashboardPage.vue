@@ -235,7 +235,7 @@ onMounted(async () => {
             <span class="material-symbols-outlined text-lg text-text-heading/50">add_circle</span>
             Buat Acara
           </button>
-          <button v-if="isCreator"
+          <button v-if="isCreator || adminEvents.length > 0"
             class="shrink-0 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-text-heading/50 hover:bg-surface-variant transition-colors cursor-pointer"
             @click="router.push({ name: 'my-events' })"
           >
